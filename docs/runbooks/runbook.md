@@ -1,0 +1,75 @@
+# Hydra ExperienceNet — Runbook
+
+Branded fork of [moonlight-qt](https://github.com/moonlight-stream/moonlight-qt) for kiosk displays.
+
+## Kiosk Mode
+
+Skips host selection and shows the app grid directly for a pre-paired host.
+
+```bash
+HydraExperienceNet kiosk <HOST> --district <DISTRICT> --venue <VENUE>
+```
+
+- `HOST`: IP address or name of the paired Sunshine host
+- `--district`: Read-only district label displayed in the header
+- `--venue`: Read-only venue label displayed in the header
+
+The host must already be paired (hydraheadflatscreen handles pairing automatically).
+
+## Standard Moonlight Modes
+
+All upstream moonlight-qt commands still work:
+
+```bash
+HydraExperienceNet                          # Normal GUI (host picker)
+HydraExperienceNet stream <HOST> <APP>      # Direct stream
+HydraExperienceNet pair <HOST>              # Pair with host
+HydraExperienceNet list <HOST>              # List apps on host
+HydraExperienceNet quit <HOST>              # Quit running app
+```
+
+## Build (macOS arm64)
+
+Requires Qt 6.7+ and Xcode.
+
+```bash
+git clone --recursive https://github.com/cederikdotcom/hydra-experiencenet.git
+cd hydra-experiencenet
+qmake moonlight-qt.pro
+make release
+```
+
+For DMG distribution:
+```bash
+./scripts/generate-dmg.sh Release
+```
+
+## Integration with hydraheadflatscreen
+
+hydraheadflatscreen manages the lifecycle:
+1. Pre-pairs with Sunshine on the assigned body
+2. Launches `HydraExperienceNet kiosk HOST --district D --venue V`
+3. User selects an experience from the grid → streams fullscreen
+4. On stream end → returns to the grid
+5. If the app exits unexpectedly, hydraheadflatscreen relaunches it
+
+## Upstream Sync
+
+This fork only adds kiosk mode and branding. All streaming, backend, and existing CLI code is untouched. To sync with upstream:
+
+```bash
+git remote add upstream https://github.com/moonlight-stream/moonlight-qt.git
+git fetch upstream
+git merge upstream/master
+```
+
+Conflicts should be minimal — limited to `main.cpp` (new case in switch), `commandlineparser.h/.cpp` (new enum + class), and `app.pro` (new source files).
+
+## Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| "Computer has not been paired" | hydraheadflatscreen must pair first, or run `HydraExperienceNet pair HOST` manually |
+| "Failed to connect to HOST" | Check network connectivity and WireGuard tunnel |
+| Empty app grid | Sunshine may not have any apps registered, or host is still loading |
+| Stream doesn't start | Check Sunshine logs on the body machine |
