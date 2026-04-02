@@ -14,6 +14,7 @@ public:
         QuitRequested,
         PairRequested,
         ListRequested,
+        KioskRequested,
     };
 
     GlobalCommandLineParser();
@@ -90,4 +91,27 @@ private:
     QString m_Host;
     bool m_PrintCSV;
     bool m_Verbose;
+};
+
+class KioskCommandLineParser
+{
+public:
+    KioskCommandLineParser();
+    virtual ~KioskCommandLineParser();
+
+    void parse(const QStringList &args, StreamingPreferences *preferences);
+
+    QString getHost() const;
+    QString getDistrict() const;
+    QString getVenue() const;
+
+private:
+    QString m_Host;
+    QString m_District;
+    QString m_Venue;
+    QMap<QString, StreamingPreferences::WindowMode> m_WindowModeMap;
+    QMap<QString, StreamingPreferences::AudioConfig> m_AudioConfigMap;
+    QMap<QString, StreamingPreferences::VideoCodecConfig> m_VideoCodecMap;
+    QMap<QString, StreamingPreferences::VideoDecoderSelection> m_VideoDecoderMap;
+    QMap<QString, StreamingPreferences::CaptureSysKeysMode> m_CaptureSysKeysModeMap;
 };

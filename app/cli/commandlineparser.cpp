@@ -161,6 +161,7 @@ GlobalCommandLineParser::ParseResult GlobalCommandLineParser::parse(const QStrin
         "  quit            Quit the currently running app\n"
         "  stream          Start streaming an app\n"
         "  pair            Pair a new host\n"
+        "  kiosk           Start in kiosk mode (app grid for a specific host)\n"
         "\n"
         "See 'moonlight <action> --help' for help of specific action."
     );
@@ -192,6 +193,8 @@ GlobalCommandLineParser::ParseResult GlobalCommandLineParser::parse(const QStrin
                 return PairRequested;
             } else if (action == "list") {
                 return ListRequested;
+            } else if (action == "kiosk") {
+                return KioskRequested;
             }
         }
 
@@ -590,4 +593,67 @@ bool ListCommandLineParser::isPrintCSV() const
 bool ListCommandLineParser::isVerbose() const
 {
     return m_Verbose;
+}
+
+KioskCommandLineParser::KioskCommandLineParser()
+{
+}
+
+KioskCommandLineParser::~KioskCommandLineParser()
+{
+}
+
+void KioskCommandLineParser::parse(const QStringList &args, StreamingPreferences *preferences)
+{
+    Q_UNUSED(preferences);
+
+    CommandLineParser parser;
+    parser.setupCommonOptions();
+    parser.setApplicationDescription(
+        "\n"
+        "Starts in kiosk mode: connects to a specific host and shows\n"
+        "the app selection grid. District and venue are displayed as\n"
+        "read-only labels in the header."
+    );
+    parser.addPositionalArgument("kiosk", "Start in kiosk mode");
+    parser.addPositionalArgument("host", "Host computer name, UUID, or IP address", "<host>");
+    parser.addValueOption("district", "District name to display");
+    parser.addValueOption("venue", "Venue name to display");
+
+    if (!parser.parse(args)) {
+        parser.showError(parser.errorText());
+    }
+
+    // This method will not return and terminates the process if --version or
+    // --help is specified
+    parser.handleHelpAndVersionOptions();
+    parser.handleUnknownOptions();
+
+    auto posArgs = parser.positionalArguments();
+    if (posArgs.length() < 2) {
+        parser.showError("Host not provided");
+    }
+    m_Host = posArgs.at(1);
+
+    if (parser.isSet("district")) {
+        m_District = parser.value("district");
+    }
+    if (parser.isSet("venue")) {
+        m_Venue = parser.value("venue");
+    }
+}
+
+QString KioskCommandLineParser::getHost() const
+{
+    return m_Host;
+}
+
+QString KioskCommandLineParser::getDistrict() const
+{
+    return m_District;
+}
+
+QString KioskCommandLineParser::getVenue() const
+{
+    return m_Venue;
 }

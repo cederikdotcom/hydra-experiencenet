@@ -2,10 +2,10 @@ QT += core quick network quickcontrols2 svg
 CONFIG += c++17
 
 unix:!macx {
-    TARGET = moonlight
+    TARGET = hydra-experiencenet
 } else {
     # On macOS, this is the name displayed in the global menu bar
-    TARGET = Moonlight
+    TARGET = HydraExperienceNet
 }
 
 include(../globaldefs.pri)
@@ -174,6 +174,7 @@ SOURCES += \
     cli/listapps.cpp \
     cli/quitstream.cpp \
     cli/startstream.cpp \
+    cli/kiosklauncher.cpp \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
     settings/streamingpreferences.cpp \
@@ -218,6 +219,7 @@ HEADERS += \
     cli/listapps.h \
     cli/quitstream.h \
     cli/startstream.h \
+    cli/kiosklauncher.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/session.h \
