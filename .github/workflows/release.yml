@@ -1,0 +1,71 @@
+---
+name: Release
+permissions:
+  contents: write
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          submodules: 'recursive'
+          fetch-depth: 1
+
+      - name: Get version
+        id: get_version
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Install create-dmg
+        run: |
+          brew install node
+          npm install --global create-dmg
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          version: 6.10.2
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5'
+
+      - name: Build and Package
+        run: bash scripts/generate-dmg.sh Release
+        env:
+          CI_VERSION: ${{ steps.get_version.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          files: build/installer-Release/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to release server
+        env:
+          HYDRARELEASE_TOKEN: ${{ secrets.HYDRARELEASE_PUBLISH_TOKEN }}
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          SERVER="https://releases.experiencenet.com"
+          PROJECT="hydraexperiencenet"
+          CHANNEL="production"
+
+          DMG_FILE=$(ls build/installer-Release/*.dmg)
+          NAME=$(basename "$DMG_FILE")
+          echo "Uploading $NAME..."
+          curl -sf -X POST \
+            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$DMG_FILE" \
+            "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/$VERSION/$NAME"
+
+          echo "Finalizing..."
+          curl -sf -X POST \
+            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+            "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/$VERSION/finalize"
