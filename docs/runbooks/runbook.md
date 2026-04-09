@@ -44,14 +44,40 @@ For DMG distribution:
 ./scripts/generate-dmg.sh Release
 ```
 
+## Local View API (kiosk mode)
+
+In kiosk mode, the app starts a local HTTP server on `127.0.0.1:9741` with view-layer endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v1/screenshot` | Captures the screen via CoreGraphics, returns JPEG |
+
+The hydraheadflatscreen Go service on `:9740` proxies screenshot requests to this server. This architecture keeps permission-sensitive operations (screen recording) in the `.app` bundle where macOS TCC can properly prompt the user.
+
+## macOS Permissions
+
+On first kiosk launch, the app triggers the macOS Screen Recording permission prompt. The user must click **Allow** in the system dialog. This only needs to happen once.
+
+The app also prevents display sleep via `IOPMAssertion` while in kiosk mode, replacing the `caffeinate` approach used by the Go service.
+
+To check or reset permissions:
+```bash
+# Check if screen recording is granted
+tccutil reset ScreenCapture com.moonlight-stream.Moonlight
+
+# View current TCC state (requires Full Disk Access)
+sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db "SELECT * FROM access WHERE service='kTCCServiceScreenCapture'"
+```
+
 ## Integration with hydraheadflatscreen
 
 hydraheadflatscreen manages the lifecycle:
 1. Pre-pairs with Sunshine on the assigned body
 2. Launches `HydraExperienceNet kiosk HOST --district D --venue V`
-3. User selects an experience from the grid → streams fullscreen
-4. On stream end → returns to the grid
+3. User selects an experience from the grid, streams fullscreen
+4. On stream end, returns to the grid
 5. If the app exits unexpectedly, hydraheadflatscreen relaunches it
+6. Screenshot requests on `:9740` are proxied to the Qt app on `:9741`
 
 ## Upstream Sync
 
@@ -73,3 +99,5 @@ Conflicts should be minimal — limited to `main.cpp` (new case in switch), `com
 | "Failed to connect to HOST" | Check network connectivity and WireGuard tunnel |
 | Empty app grid | Sunshine may not have any apps registered, or host is still loading |
 | Stream doesn't start | Check Sunshine logs on the body machine |
+| Screenshot returns 403 | Screen recording permission not granted. Reset with `tccutil reset ScreenCapture` and relaunch kiosk |
+| Screenshot returns 502 | Qt app local server on :9741 not running. Check if kiosk app is running |
