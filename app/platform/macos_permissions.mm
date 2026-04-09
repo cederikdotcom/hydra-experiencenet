@@ -9,6 +9,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#import <ScreenCaptureKit/ScreenCaptureKit.h>
+#include <dispatch/dispatch.h>
 
 bool checkScreenRecordingPermission()
 {
@@ -66,6 +68,62 @@ void releaseDisplaySleepAssertion(uint32_t assertionId)
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Display sleep prevention released (assertion %u)", assertionId);
     }
+}
+
+CGImageRef captureDisplay()
+{
+    __block CGImageRef result = nil;
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+
+    // Get shareable content (displays and windows)
+    [SCShareableContent getShareableContentExcludingDesktopWindows:NO
+                                             onScreenWindowsOnly:YES
+                                               completionHandler:^(SCShareableContent * _Nullable content, NSError * _Nullable error) {
+        if (error || !content || content.displays.count == 0) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "ScreenCaptureKit: failed to get shareable content: %s",
+                         error ? error.localizedDescription.UTF8String : "no displays");
+            dispatch_semaphore_signal(semaphore);
+            return;
+        }
+
+        SCDisplay *mainDisplay = content.displays.firstObject;
+
+        SCContentFilter *filter = [[SCContentFilter alloc] initWithDisplay:mainDisplay
+                                                         excludingWindows:@[]];
+
+        SCStreamConfiguration *config = [[SCStreamConfiguration alloc] init];
+        config.width = mainDisplay.width;
+        config.height = mainDisplay.height;
+        config.pixelFormat = kCVPixelFormatType_32BGRA;
+        config.captureResolution = SCCaptureResolutionNominal;
+        config.showsCursor = YES;
+
+        [SCScreenshotManager captureImageWithFilter:filter
+                                      configuration:config
+                                  completionHandler:^(CGImageRef _Nullable image, NSError * _Nullable captureError) {
+            if (captureError || !image) {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                             "ScreenCaptureKit: capture failed: %s",
+                             captureError ? captureError.localizedDescription.UTF8String : "nil image");
+            } else {
+                result = CGImageRetain(image);
+            }
+            dispatch_semaphore_signal(semaphore);
+        }];
+    }];
+
+    // Wait up to 5 seconds for the async capture
+    dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC));
+
+    if (!result) {
+        // Fallback to CGDisplayCreateImage
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "ScreenCaptureKit failed, falling back to CGDisplayCreateImage");
+        result = CGDisplayCreateImage(CGMainDisplayID());
+    }
+
+    return result;
 }
 
 void requestLocalNetworkPermission()

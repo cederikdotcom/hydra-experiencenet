@@ -153,7 +153,7 @@ macx {
         CONFIG += discord-rpc
     }
 
-    LIBS += -lobjc -framework VideoToolbox -framework AVFoundation -framework CoreVideo -framework CoreGraphics -framework CoreMedia -framework AppKit -framework Metal -framework QuartzCore -framework IOKit
+    LIBS += -lobjc -framework VideoToolbox -framework AVFoundation -framework CoreVideo -framework CoreGraphics -framework CoreMedia -framework AppKit -framework Metal -framework QuartzCore -framework IOKit -framework ScreenCaptureKit
     CONFIG += ffmpeg
 }
 

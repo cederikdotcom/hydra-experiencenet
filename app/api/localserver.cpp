@@ -9,6 +9,7 @@
 
 #ifdef Q_OS_MACOS
 #include <CoreGraphics/CoreGraphics.h>
+#include "../platform/macos_permissions.h"
 #endif
 
 LocalServer::LocalServer(QObject* parent)
@@ -92,7 +93,7 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
 void LocalServer::handleScreenshot(QTcpSocket* socket)
 {
 #ifdef Q_OS_MACOS
-    CGImageRef cgImage = CGDisplayCreateImage(CGMainDisplayID());
+    CGImageRef cgImage = captureDisplay();
     if (!cgImage) {
         sendError(socket, 403, "Screen recording permission not granted");
         return;

@@ -3,6 +3,8 @@
 #include <stdint.h>
 
 #ifdef __APPLE__
+#include <CoreGraphics/CGImage.h>
+#include <CoreGraphics/CGDirectDisplay.h>
 
 // Checks if screen recording permission has been granted.
 // Returns true if the app can capture the screen.
@@ -25,5 +27,11 @@ void releaseDisplaySleepAssertion(uint32_t assertionId);
 // a UDP broadcast. The user will see "HydraExperienceNet would like
 // to find and connect to devices on your local network."
 void requestLocalNetworkPermission();
+
+// Captures the main display using ScreenCaptureKit (macOS 14+).
+// Captures everything including SDL Metal fullscreen content and across Spaces.
+// Returns a CGImageRef that the caller must release. Returns NULL on failure.
+// Falls back to CGDisplayCreateImage if ScreenCaptureKit is unavailable.
+CGImageRef captureDisplay();
 
 #endif
