@@ -14,7 +14,11 @@ bool checkScreenRecordingPermission()
 {
     // CGDisplayCreateImage returns nil if screen recording permission
     // has not been granted. This is the standard way to check.
-    CGImageRef image = CGDisplayCreateImage(CGMainDisplayID());
+    CGImageRef image = CGWindowListCreateImage(
+        CGRectInfinite,
+        kCGWindowListOptionOnScreenOnly,
+        kCGNullWindowID,
+        kCGWindowImageDefault);
     if (image) {
         CGImageRelease(image);
         return true;
@@ -27,7 +31,11 @@ void requestScreenRecordingPermission()
     // Attempting CGDisplayCreateImage triggers the macOS TCC prompt
     // if the app hasn't been granted screen recording permission yet.
     // The prompt says "HydraExperienceNet would like to record this screen."
-    CGImageRef image = CGDisplayCreateImage(CGMainDisplayID());
+    CGImageRef image = CGWindowListCreateImage(
+        CGRectInfinite,
+        kCGWindowListOptionOnScreenOnly,
+        kCGNullWindowID,
+        kCGWindowImageDefault);
     if (image) {
         CGImageRelease(image);
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,

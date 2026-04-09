@@ -92,7 +92,11 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
 void LocalServer::handleScreenshot(QTcpSocket* socket)
 {
 #ifdef Q_OS_MACOS
-    CGImageRef cgImage = CGDisplayCreateImage(CGMainDisplayID());
+    CGImageRef cgImage = CGWindowListCreateImage(
+        CGRectInfinite,
+        kCGWindowListOptionOnScreenOnly,
+        kCGNullWindowID,
+        kCGWindowImageDefault);
     if (!cgImage) {
         sendError(socket, 403, "Screen recording permission not granted");
         return;
