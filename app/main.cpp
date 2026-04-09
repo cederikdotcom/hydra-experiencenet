@@ -990,9 +990,11 @@ int main(int argc, char *argv[])
             engine.rootContext()->setContextProperty("kioskVenue", kioskParser.getVenue());
 
 #ifdef Q_OS_MACOS
-            // Request screen recording permission on first kiosk launch.
-            // This triggers the macOS TCC dialog so the user can click Allow.
+            // Request all macOS TCC permissions on first kiosk launch.
+            // These trigger proper system dialogs with Allow buttons because
+            // HydraExperienceNet is a .app bundle (unlike raw Go binaries).
             requestScreenRecordingPermission();
+            requestLocalNetworkPermission();
 
             // Prevent display sleep while kiosk is running.
             preventDisplaySleep();

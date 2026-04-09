@@ -76,6 +76,8 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
 
     if (method == "GET" && path == "/api/v1/screenshot") {
         handleScreenshot(socket);
+    } else if (method == "GET" && path.startsWith("/api/v1/probe?")) {
+        handleProbe(socket, path);
     } else {
         sendError(socket, 404, "Not Found");
     }
@@ -119,6 +121,40 @@ void LocalServer::handleScreenshot(QTcpSocket* socket)
 #else
     sendError(socket, 501, "Screenshots only supported on macOS");
 #endif
+}
+
+void LocalServer::handleProbe(QTcpSocket* socket, const QByteArray& path)
+{
+    // Parse query parameters: /api/v1/probe?host=IP&port=PORT
+    QByteArray query = path.mid(path.indexOf('?') + 1);
+    QList<QByteArray> params = query.split('&');
+
+    QString host;
+    quint16 port = 0;
+
+    for (const QByteArray& param : params) {
+        int eq = param.indexOf('=');
+        if (eq < 0) continue;
+        QByteArray key = param.left(eq);
+        QByteArray value = param.mid(eq + 1);
+        if (key == "host") host = QString::fromUtf8(value);
+        else if (key == "port") port = value.toUShort();
+    }
+
+    if (host.isEmpty() || port == 0) {
+        sendError(socket, 400, "host and port query parameters required");
+        return;
+    }
+
+    // TCP connectivity probe with 1 second timeout.
+    // This runs under the Qt app's TCC Local Network permission.
+    QTcpSocket probe;
+    probe.connectToHost(host, port);
+    bool connected = probe.waitForConnected(1000);
+    probe.close();
+
+    QByteArray body = connected ? "{\"reachable\":true}" : "{\"reachable\":false}";
+    sendResponse(socket, 200, "application/json", body);
 }
 
 void LocalServer::sendResponse(QTcpSocket* socket, int statusCode,

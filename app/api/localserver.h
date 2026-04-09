@@ -8,6 +8,7 @@
 //
 // Endpoints:
 //   GET /api/v1/screenshot - captures the screen and returns JPEG
+//   GET /api/v1/probe?host=IP&port=PORT - TCP connectivity check (routes through app's TCC)
 class LocalServer : public QObject
 {
     Q_OBJECT
@@ -24,6 +25,7 @@ private slots:
 private:
     void handleRequest(QTcpSocket* socket, const QByteArray& request);
     void handleScreenshot(QTcpSocket* socket);
+    void handleProbe(QTcpSocket* socket, const QByteArray& path);
     void sendResponse(QTcpSocket* socket, int statusCode, const QByteArray& contentType, const QByteArray& body);
     void sendError(QTcpSocket* socket, int statusCode, const QString& message);
 

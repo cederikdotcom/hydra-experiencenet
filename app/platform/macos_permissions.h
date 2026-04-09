@@ -21,4 +21,9 @@ uint32_t preventDisplaySleep();
 // Releases a display sleep prevention assertion.
 void releaseDisplaySleepAssertion(uint32_t assertionId);
 
+// Triggers the macOS TCC prompt for local network access by sending
+// a UDP broadcast. The user will see "HydraExperienceNet would like
+// to find and connect to devices on your local network."
+void requestLocalNetworkPermission();
+
 #endif
