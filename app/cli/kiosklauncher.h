@@ -1,12 +1,7 @@
 #pragma once
 
 #include <QObject>
-#include <QVariant>
-
-class ComputerManager;
-class NvComputer;
-class Session;
-class StreamingPreferences;
+#include <QString>
 
 namespace CliKiosk
 {
@@ -16,27 +11,17 @@ class Launcher : public QObject
     Q_OBJECT
 
 public:
-    explicit Launcher(QString computer, QObject *parent = nullptr);
+    explicit Launcher(QString district, QString venue, QObject *parent = nullptr);
     ~Launcher();
-    Q_INVOKABLE void execute(ComputerManager *manager);
-    Q_INVOKABLE bool isExecuted() const;
-    Q_INVOKABLE int getComputerIndex() const;
+    Q_INVOKABLE QString getDistrict() const;
+    Q_INVOKABLE QString getVenue() const;
 
 signals:
-    void searchingComputer();
-    void computerReady(int computerIndex);
-    void failed(QString text);
-
-private slots:
-    void onComputerFound(NvComputer *computer);
-    void onTimeout();
+    void ready();
 
 private:
-    QString m_ComputerName;
-    ComputerManager *m_ComputerManager;
-    NvComputer *m_Computer;
-    bool m_Executed;
-    int m_ComputerIndex;
+    QString m_District;
+    QString m_Venue;
 };
 
 }

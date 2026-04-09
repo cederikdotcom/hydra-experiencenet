@@ -611,12 +611,15 @@ void KioskCommandLineParser::parse(const QStringList &args, StreamingPreferences
     parser.setupCommonOptions();
     parser.setApplicationDescription(
         "\n"
-        "Starts in kiosk mode: connects to a specific host and shows\n"
-        "the app selection grid. District and venue are displayed as\n"
-        "read-only labels in the header."
+        "Starts in kiosk mode: fetches experiences from the local agent API\n"
+        "and shows the experience selection grid. District and venue are\n"
+        "displayed as read-only labels in the header.\n"
+        "\n"
+        "The kiosk talks to http://localhost:9740 (hydraheadflatscreen agent).\n"
+        "Host is optional (for backwards compatibility only)."
     );
     parser.addPositionalArgument("kiosk", "Start in kiosk mode");
-    parser.addPositionalArgument("host", "Host computer name, UUID, or IP address", "<host>");
+    parser.addPositionalArgument("host", "Host (optional, for backwards compatibility)", "[host]");
     parser.addValueOption("district", "District name to display");
     parser.addValueOption("venue", "Venue name to display");
 
@@ -630,10 +633,10 @@ void KioskCommandLineParser::parse(const QStringList &args, StreamingPreferences
     parser.handleUnknownOptions();
 
     auto posArgs = parser.positionalArguments();
-    if (posArgs.length() < 2) {
-        parser.showError("Host not provided");
+    // Host is optional — if provided, store it for backwards compatibility
+    if (posArgs.length() >= 2) {
+        m_Host = posArgs.at(1);
     }
-    m_Host = posArgs.at(1);
 
     if (parser.isSet("district")) {
         m_District = parser.value("district");

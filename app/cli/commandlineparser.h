@@ -109,9 +109,4 @@ private:
     QString m_Host;
     QString m_District;
     QString m_Venue;
-    QMap<QString, StreamingPreferences::WindowMode> m_WindowModeMap;
-    QMap<QString, StreamingPreferences::AudioConfig> m_AudioConfigMap;
-    QMap<QString, StreamingPreferences::VideoCodecConfig> m_VideoCodecMap;
-    QMap<QString, StreamingPreferences::VideoDecoderSelection> m_VideoDecoderMap;
-    QMap<QString, StreamingPreferences::CaptureSysKeysMode> m_CaptureSysKeysModeMap;
 };

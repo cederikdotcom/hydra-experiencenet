@@ -42,7 +42,7 @@
 #include "cli/quitstream.h"
 #include "cli/startstream.h"
 #include "cli/pair.h"
-#include "cli/kiosklauncher.h"
+// kiosklauncher.h no longer needed — kiosk talks to local agent API
 #include "cli/commandlineparser.h"
 #include "path.h"
 #include "utils.h"
@@ -982,8 +982,6 @@ int main(int argc, char *argv[])
             StreamingPreferences* preferences = StreamingPreferences::get();
             KioskCommandLineParser kioskParser;
             kioskParser.parse(app.arguments(), preferences);
-            auto launcher = new CliKiosk::Launcher(kioskParser.getHost(), &app);
-            engine.rootContext()->setContextProperty("kioskLauncher", launcher);
             engine.rootContext()->setContextProperty("kioskDistrict", kioskParser.getDistrict());
             engine.rootContext()->setContextProperty("kioskVenue", kioskParser.getVenue());
             break;
