@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef Q_OS_MACOS
+#ifdef __APPLE__
 
 // Checks if screen recording permission has been granted.
 // Returns true if the app can capture the screen.

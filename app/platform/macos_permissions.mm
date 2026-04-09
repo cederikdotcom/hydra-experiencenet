@@ -1,6 +1,6 @@
 #include "macos_permissions.h"
 
-#ifdef Q_OS_MACOS
+#ifdef __APPLE__
 
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/pwr_mgt/IOPMLib.h>
