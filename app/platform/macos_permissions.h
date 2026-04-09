@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __APPLE__
 
 // Checks if screen recording permission has been granted.
