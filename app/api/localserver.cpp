@@ -1,0 +1,166 @@
+#include "localserver.h"
+
+#include <QTcpSocket>
+#include <QBuffer>
+#include <QImage>
+#include <SDL_log.h>
+
+#ifdef Q_OS_MACOS
+#include <CoreGraphics/CoreGraphics.h>
+#endif
+
+LocalServer::LocalServer(QObject* parent)
+    : QObject(parent),
+      m_server(new QTcpServer(this))
+{
+    connect(m_server, &QTcpServer::newConnection,
+            this, &LocalServer::handleConnection);
+}
+
+LocalServer::~LocalServer()
+{
+    m_server->close();
+}
+
+bool LocalServer::start(quint16 port)
+{
+    if (!m_server->listen(QHostAddress::LocalHost, port)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "LocalServer: failed to listen on port %d: %s",
+                     port, m_server->errorString().toUtf8().constData());
+        return false;
+    }
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "LocalServer: listening on 127.0.0.1:%d", port);
+    return true;
+}
+
+void LocalServer::handleConnection()
+{
+    while (QTcpSocket* socket = m_server->nextPendingConnection()) {
+        connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+            QByteArray request = socket->readAll();
+            handleRequest(socket, request);
+        });
+        connect(socket, &QTcpSocket::disconnected, socket, &QTcpSocket::deleteLater);
+
+        // Handle case where data arrived before signal connection
+        if (socket->bytesAvailable() > 0) {
+            QByteArray request = socket->readAll();
+            handleRequest(socket, request);
+        }
+    }
+}
+
+void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
+{
+    // Parse the HTTP request line
+    int lineEnd = request.indexOf("\r\n");
+    if (lineEnd < 0) {
+        lineEnd = request.indexOf("\n");
+    }
+    if (lineEnd < 0) {
+        sendError(socket, 400, "Bad Request");
+        return;
+    }
+
+    QByteArray requestLine = request.left(lineEnd);
+    QList<QByteArray> parts = requestLine.split(' ');
+    if (parts.size() < 2) {
+        sendError(socket, 400, "Bad Request");
+        return;
+    }
+
+    QByteArray method = parts[0];
+    QByteArray path = parts[1];
+
+    if (method == "GET" && path == "/api/v1/screenshot") {
+        handleScreenshot(socket);
+    } else {
+        sendError(socket, 404, "Not Found");
+    }
+}
+
+void LocalServer::handleScreenshot(QTcpSocket* socket)
+{
+#ifdef Q_OS_MACOS
+    CGImageRef cgImage = CGDisplayCreateImage(CGMainDisplayID());
+    if (!cgImage) {
+        sendError(socket, 403, "Screen recording permission not granted");
+        return;
+    }
+
+    // Convert CGImage to QImage
+    size_t width = CGImageGetWidth(cgImage);
+    size_t height = CGImageGetHeight(cgImage);
+
+    QImage image((int)width, (int)height, QImage::Format_ARGB32);
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(
+        image.bits(), width, height, 8, image.bytesPerLine(),
+        colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
+
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), cgImage);
+
+    CGContextRelease(context);
+    CGColorSpaceRelease(colorSpace);
+    CGImageRelease(cgImage);
+
+    // Encode as JPEG
+    QByteArray jpegData;
+    QBuffer buffer(&jpegData);
+    buffer.open(QIODevice::WriteOnly);
+    if (!image.save(&buffer, "JPEG", 85)) {
+        sendError(socket, 500, "Failed to encode screenshot");
+        return;
+    }
+
+    sendResponse(socket, 200, "image/jpeg", jpegData);
+#else
+    sendError(socket, 501, "Screenshots only supported on macOS");
+#endif
+}
+
+void LocalServer::sendResponse(QTcpSocket* socket, int statusCode,
+                                const QByteArray& contentType, const QByteArray& body)
+{
+    QByteArray response;
+    response.append("HTTP/1.1 ");
+    response.append(QByteArray::number(statusCode));
+    response.append(" OK\r\n");
+    response.append("Content-Type: ");
+    response.append(contentType);
+    response.append("\r\n");
+    response.append("Content-Length: ");
+    response.append(QByteArray::number(body.size()));
+    response.append("\r\n");
+    response.append("Connection: close\r\n");
+    response.append("\r\n");
+    response.append(body);
+
+    socket->write(response);
+    socket->flush();
+    socket->disconnectFromHost();
+}
+
+void LocalServer::sendError(QTcpSocket* socket, int statusCode, const QString& message)
+{
+    QByteArray body = message.toUtf8();
+    QByteArray response;
+    response.append("HTTP/1.1 ");
+    response.append(QByteArray::number(statusCode));
+    response.append(" ");
+    response.append(body);
+    response.append("\r\n");
+    response.append("Content-Type: text/plain\r\n");
+    response.append("Content-Length: ");
+    response.append(QByteArray::number(body.size()));
+    response.append("\r\n");
+    response.append("Connection: close\r\n");
+    response.append("\r\n");
+    response.append(body);
+
+    socket->write(response);
+    socket->flush();
+    socket->disconnectFromHost();
+}

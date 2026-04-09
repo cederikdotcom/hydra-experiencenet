@@ -44,6 +44,10 @@
 #include "cli/pair.h"
 // kiosklauncher.h no longer needed — kiosk talks to local agent API
 #include "cli/commandlineparser.h"
+#include "api/localserver.h"
+#ifdef Q_OS_MACOS
+#include "platform/macos_permissions.h"
+#endif
 #include "path.h"
 #include "utils.h"
 #include "gui/computermodel.h"
@@ -984,6 +988,20 @@ int main(int argc, char *argv[])
             kioskParser.parse(app.arguments(), preferences);
             engine.rootContext()->setContextProperty("kioskDistrict", kioskParser.getDistrict());
             engine.rootContext()->setContextProperty("kioskVenue", kioskParser.getVenue());
+
+#ifdef Q_OS_MACOS
+            // Request screen recording permission on first kiosk launch.
+            // This triggers the macOS TCC dialog so the user can click Allow.
+            requestScreenRecordingPermission();
+
+            // Prevent display sleep while kiosk is running.
+            preventDisplaySleep();
+#endif
+
+            // Start the local view API server for screenshot proxying.
+            auto* localServer = new LocalServer(&app);
+            localServer->start();
+
             break;
         }
     }

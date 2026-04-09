@@ -153,7 +153,7 @@ macx {
         CONFIG += discord-rpc
     }
 
-    LIBS += -lobjc -framework VideoToolbox -framework AVFoundation -framework CoreVideo -framework CoreGraphics -framework CoreMedia -framework AppKit -framework Metal -framework QuartzCore
+    LIBS += -lobjc -framework VideoToolbox -framework AVFoundation -framework CoreVideo -framework CoreGraphics -framework CoreMedia -framework AppKit -framework Metal -framework QuartzCore -framework IOKit
     CONFIG += ffmpeg
 }
 
@@ -175,6 +175,7 @@ SOURCES += \
     cli/quitstream.cpp \
     cli/startstream.cpp \
     cli/kiosklauncher.cpp \
+    api/localserver.cpp \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
     settings/streamingpreferences.cpp \
@@ -220,6 +221,7 @@ HEADERS += \
     cli/quitstream.h \
     cli/startstream.h \
     cli/kiosklauncher.h \
+    api/localserver.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/session.h \
@@ -400,10 +402,12 @@ macx {
     SOURCES += \
         streaming/video/ffmpeg-renderers/vt_base.mm \
         streaming/video/ffmpeg-renderers/vt_avsamplelayer.mm \
-        streaming/video/ffmpeg-renderers/vt_metal.mm
+        streaming/video/ffmpeg-renderers/vt_metal.mm \
+        platform/macos_permissions.mm
 
     HEADERS += \
-        streaming/video/ffmpeg-renderers/vt.h
+        streaming/video/ffmpeg-renderers/vt.h \
+        platform/macos_permissions.h
 }
 discord-rpc {
     message(Discord integration enabled)
