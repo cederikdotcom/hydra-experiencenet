@@ -3,14 +3,12 @@
 #include <QTcpSocket>
 #include <QBuffer>
 #include <QImage>
+#include <QFile>
+#include <QProcess>
 #include <QGuiApplication>
 #include <QWindow>
 #include <SDL_log.h>
 
-#ifdef Q_OS_MACOS
-#include <CoreGraphics/CoreGraphics.h>
-#include "../platform/macos_permissions.h"
-#endif
 
 LocalServer::LocalServer(QObject* parent)
     : QObject(parent),
@@ -93,36 +91,26 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
 void LocalServer::handleScreenshot(QTcpSocket* socket)
 {
 #ifdef Q_OS_MACOS
-    CGImageRef cgImage = captureDisplay();
-    if (!cgImage) {
-        sendError(socket, 403, "Screen recording permission not granted");
+    // Use macOS screencapture command which uses the private SkyLight
+    // framework to capture across all Spaces and SDL Metal layers.
+    // This runs from the kiosk process which is in the GUI session.
+    QString path = "/tmp/hydra-screenshot.jpg";
+    QProcess process;
+    process.start("screencapture", QStringList() << "-x" << "-t" << "jpg" << path);
+    if (!process.waitForFinished(5000) || process.exitCode() != 0) {
+        sendError(socket, 500, "screencapture failed");
         return;
     }
 
-    // Convert CGImage to QImage
-    size_t width = CGImageGetWidth(cgImage);
-    size_t height = CGImageGetHeight(cgImage);
-
-    QImage image((int)width, (int)height, QImage::Format_ARGB32);
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    CGContextRef context = CGBitmapContextCreate(
-        image.bits(), width, height, 8, image.bytesPerLine(),
-        colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
-
-    CGContextDrawImage(context, CGRectMake(0, 0, width, height), cgImage);
-
-    CGContextRelease(context);
-    CGColorSpaceRelease(colorSpace);
-    CGImageRelease(cgImage);
-
-    // Encode as JPEG
-    QByteArray jpegData;
-    QBuffer buffer(&jpegData);
-    buffer.open(QIODevice::WriteOnly);
-    if (!image.save(&buffer, "JPEG", 85)) {
-        sendError(socket, 500, "Failed to encode screenshot");
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        sendError(socket, 500, "Failed to read screenshot file");
         return;
     }
+
+    QByteArray jpegData = file.readAll();
+    file.close();
+    QFile::remove(path);
 
     sendResponse(socket, 200, "image/jpeg", jpegData);
 #else
