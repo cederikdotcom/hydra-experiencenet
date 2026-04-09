@@ -9,6 +9,8 @@
 // Endpoints:
 //   GET /api/v1/screenshot - captures the screen and returns JPEG
 //   GET /api/v1/probe?host=IP&port=PORT - TCP connectivity check (routes through app's TCC)
+//   POST /api/v1/window/hide - hide the kiosk window (stream takes over display)
+//   POST /api/v1/window/show - show the kiosk window (stream ended)
 class LocalServer : public QObject
 {
     Q_OBJECT
@@ -26,6 +28,8 @@ private:
     void handleRequest(QTcpSocket* socket, const QByteArray& request);
     void handleScreenshot(QTcpSocket* socket);
     void handleProbe(QTcpSocket* socket, const QByteArray& path);
+    void handleWindowHide(QTcpSocket* socket);
+    void handleWindowShow(QTcpSocket* socket);
     void sendResponse(QTcpSocket* socket, int statusCode, const QByteArray& contentType, const QByteArray& body);
     void sendError(QTcpSocket* socket, int statusCode, const QString& message);
 

@@ -3,6 +3,8 @@
 #include <QTcpSocket>
 #include <QBuffer>
 #include <QImage>
+#include <QGuiApplication>
+#include <QWindow>
 #include <SDL_log.h>
 
 #ifdef Q_OS_MACOS
@@ -78,6 +80,10 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
         handleScreenshot(socket);
     } else if (method == "GET" && path.startsWith("/api/v1/probe?")) {
         handleProbe(socket, path);
+    } else if (method == "POST" && path == "/api/v1/window/hide") {
+        handleWindowHide(socket);
+    } else if (method == "POST" && path == "/api/v1/window/show") {
+        handleWindowShow(socket);
     } else {
         sendError(socket, 404, "Not Found");
     }
@@ -155,6 +161,28 @@ void LocalServer::handleProbe(QTcpSocket* socket, const QByteArray& path)
 
     QByteArray body = connected ? "{\"reachable\":true}" : "{\"reachable\":false}";
     sendResponse(socket, 200, "application/json", body);
+}
+
+void LocalServer::handleWindowHide(QTcpSocket* socket)
+{
+    QWindowList windows = QGuiApplication::topLevelWindows();
+    for (QWindow* window : windows) {
+        window->hide();
+    }
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "LocalServer: kiosk window hidden");
+    sendResponse(socket, 200, "application/json", "{\"status\":\"hidden\"}");
+}
+
+void LocalServer::handleWindowShow(QTcpSocket* socket)
+{
+    QWindowList windows = QGuiApplication::topLevelWindows();
+    for (QWindow* window : windows) {
+        window->show();
+        window->raise();
+        window->requestActivate();
+    }
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "LocalServer: kiosk window shown");
+    sendResponse(socket, 200, "application/json", "{\"status\":\"shown\"}");
 }
 
 void LocalServer::sendResponse(QTcpSocket* socket, int statusCode,
