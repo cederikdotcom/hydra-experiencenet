@@ -50,7 +50,7 @@ In kiosk mode, the app starts a local HTTP server on `127.0.0.1:9741` with view-
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/v1/screenshot` | Captures the screen via CoreGraphics, returns JPEG |
+| `GET /api/v1/screenshot` | Captures the screen via macOS `screencapture` command (SkyLight), returns JPEG |
 
 The hydraheadflatscreen Go service on `:9740` proxies screenshot requests to this server. This architecture keeps permission-sensitive operations (screen recording) in the `.app` bundle where macOS TCC can properly prompt the user.
 
@@ -63,7 +63,7 @@ The app also prevents display sleep via `IOPMAssertion` while in kiosk mode, rep
 To check or reset permissions:
 ```bash
 # Check if screen recording is granted
-tccutil reset ScreenCapture com.moonlight-stream.Moonlight
+tccutil reset ScreenCapture com.experiencenet.hydraexperiencenet
 
 # View current TCC state (requires Full Disk Access)
 sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db "SELECT * FROM access WHERE service='kTCCServiceScreenCapture'"
