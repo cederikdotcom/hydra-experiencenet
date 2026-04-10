@@ -3,11 +3,14 @@
 #include <QTcpSocket>
 #include <QBuffer>
 #include <QImage>
-#include <QFile>
-#include <QProcess>
 #include <QGuiApplication>
 #include <QWindow>
 #include <SDL_log.h>
+
+#ifdef Q_OS_MACOS
+#include "../platform/macos_permissions.h"
+#include <CoreGraphics/CoreGraphics.h>
+#endif
 
 
 LocalServer::LocalServer(QObject* parent)
@@ -91,28 +94,36 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
 void LocalServer::handleScreenshot(QTcpSocket* socket)
 {
 #ifdef Q_OS_MACOS
-    // Use macOS screencapture command which uses the private SkyLight
-    // framework to capture across all Spaces and SDL Metal layers.
-    // This runs from the kiosk process which is in the GUI session.
-    QString path = "/tmp/hydra-screenshot.jpg";
-    QProcess process;
-    process.start("screencapture", QStringList() << "-x" << "-t" << "jpg" << path);
-    if (!process.waitForFinished(5000) || process.exitCode() != 0) {
-        sendError(socket, 500, "screencapture failed");
+    // Use ScreenCaptureKit / CGDisplayCreateImage to capture the display.
+    // This works for windowed mode content. The Qt app already has Screen
+    // Recording TCC permission tied to its .app bundle.
+    CGImageRef image = captureDisplay();
+    if (!image) {
+        sendError(socket, 500, "display capture failed");
         return;
     }
 
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        sendError(socket, 500, "Failed to read screenshot file");
-        return;
-    }
+    // Convert CGImage to JPEG data via QImage
+    size_t width = CGImageGetWidth(image);
+    size_t height = CGImageGetHeight(image);
 
-    QByteArray jpegData = file.readAll();
-    file.close();
-    QFile::remove(path);
+    // Create a bitmap context to render the CGImage into raw pixel data
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    QImage qImage(width, height, QImage::Format_ARGB32);
+    CGContextRef context = CGBitmapContextCreate(
+        qImage.bits(), width, height, 8, qImage.bytesPerLine(),
+        colorSpace, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host);
 
-    sendResponse(socket, 200, "image/jpeg", jpegData);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    CGContextRelease(context);
+    CGColorSpaceRelease(colorSpace);
+    CGImageRelease(image);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    qImage.save(&buffer, "JPEG", 80);
+
+    sendResponse(socket, 200, "image/jpeg", buffer.data());
 #else
     sendError(socket, 501, "Screenshots only supported on macOS");
 #endif
