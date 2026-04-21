@@ -2,7 +2,12 @@
 
 #include <Limelight.h>
 #include "SDL_compat.h"
+#include "streaming/session.h"
 #include "streaming/streamutils.h"
+
+// Height of the top strip in window-space pixels that summons the exit
+// overlay back on hover or tap when it has auto-hidden.
+static const int EXIT_OVERLAY_REVEAL_HEIGHT = 60;
 
 void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 {
@@ -12,7 +17,29 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
         // Ignore synthetic mouse events
         return;
     }
-    else if (!isCaptureActive()) {
+
+    // If the visitor taps the exit overlay, consume the event and trigger a
+    // clean disconnect back to the kiosk grid. Must run before the capture
+    // logic below so a tap on the pill doesn't get forwarded to the host as
+    // a click.
+    if (event->button == SDL_BUTTON_LEFT && event->state == SDL_PRESSED) {
+        Session* session = Session::get();
+        if (session != nullptr && session->isPointInExitOverlay(event->x, event->y)) {
+            session->triggerExitFromOverlay();
+            return;
+        }
+
+        // If the overlay is hidden but the tap lands in the top reveal
+        // strip, summon it back instead of forwarding to the host. Keeps
+        // the kiosk exit gesture discoverable even after the 3-second
+        // auto-hide.
+        if (session != nullptr && event->y <= EXIT_OVERLAY_REVEAL_HEIGHT) {
+            session->showExitOverlay();
+            return;
+        }
+    }
+
+    if (!isCaptureActive()) {
         if (event->button == SDL_BUTTON_LEFT && event->state == SDL_RELEASED &&
                 isMouseInVideoRegion(event->x, event->y)) {
             // Capture the mouse again if clicked when unbound.
@@ -70,6 +97,18 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 
 void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
 {
+    // Summon the exit overlay back when the mouse hovers over the top
+    // reveal strip. Runs before the capture check so a visitor steering
+    // a cursor to the top of the screen always gets the pill to reappear.
+    if (event->which != SDL_TOUCH_MOUSEID && event->y <= EXIT_OVERLAY_REVEAL_HEIGHT) {
+        Session* session = Session::get();
+        if (session != nullptr && !session->isPointInExitOverlay(event->x, event->y)) {
+            // isPointInExitOverlay returns false while the overlay is hidden,
+            // which is exactly when we want to show it again.
+            session->showExitOverlay();
+        }
+    }
+
     if (!isCaptureActive()) {
         // Not capturing
         return;

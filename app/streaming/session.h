@@ -125,6 +125,20 @@ public:
 
     void setShouldExit(bool quitHostApp = false);
 
+    // Shows the on-stream exit overlay for 3 seconds so kiosk visitors
+    // can discover how to return to the experience grid.
+    void showExitOverlay();
+
+    // Tests whether a window-space point lies inside the on-stream exit
+    // overlay's hit region. Returns true when the overlay is visible and
+    // the point is within the rectangle we draw.
+    bool isPointInExitOverlay(int windowX, int windowY);
+
+    // Triggered when the visitor taps the on-stream exit overlay. Hides
+    // the overlay and asks the session to disconnect cleanly so the
+    // existing quitStarting / sessionFinished path returns to the kiosk.
+    void triggerExitFromOverlay();
+
 signals:
     void stageStarting(QString stage);
 

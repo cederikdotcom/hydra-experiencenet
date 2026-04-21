@@ -3,9 +3,15 @@
 #include <Limelight.h>
 #include "SDL_compat.h"
 #include <SDL_syswm.h>
+#include "streaming/session.h"
 #include "streaming/streamutils.h"
 
 #include <QtMath>
+
+// Height of the top strip in window-space pixels that summons the exit
+// overlay back on a finger tap when it has auto-hidden. Matches the
+// value used for mouse hover in mouse.cpp.
+static const int EXIT_OVERLAY_TOUCH_REVEAL_HEIGHT = 60;
 
 // How long the fingers must be stationary to start a right click
 #define LONG_PRESS_ACTIVATION_DELAY 650
@@ -65,6 +71,30 @@ void SdlInputHandler::handleAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
     int windowWidth, windowHeight;
 
     SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
+
+    // Intercept finger-down in the exit overlay before anything else so a
+    // tap on the pill triggers a clean disconnect instead of being
+    // forwarded to the host as a touch event. Matches the mouse path in
+    // mouse.cpp so touch kiosks get the same exit gesture.
+    if (event->type == SDL_FINGERDOWN) {
+        int pixelX = (int)(event->x * windowWidth);
+        int pixelY = (int)(event->y * windowHeight);
+
+        Session* session = Session::get();
+        if (session != nullptr) {
+            if (session->isPointInExitOverlay(pixelX, pixelY)) {
+                session->triggerExitFromOverlay();
+                return;
+            }
+            if (pixelY <= EXIT_OVERLAY_TOUCH_REVEAL_HEIGHT) {
+                // Summon the overlay back after it has auto-hidden. Still
+                // return here so the finger-down does not get forwarded to
+                // the host experience, keeping the reveal gesture harmless.
+                session->showExitOverlay();
+                return;
+            }
+        }
+    }
 
     src.x = src.y = 0;
     src.w = m_StreamWidth;

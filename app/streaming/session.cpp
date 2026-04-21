@@ -7,6 +7,9 @@
 #include "SDL_compat.h"
 #include "utils.h"
 
+#include <QTimer>
+#include <algorithm>
+
 #ifdef HAVE_FFMPEG
 #include "video/ffmpeg.h"
 #endif
@@ -1698,6 +1701,9 @@ bool Session::startConnectionAsync()
     }
 
     emit connectionStarted();
+
+    showExitOverlay();
+
     return true;
 }
 
@@ -1729,6 +1735,63 @@ void Session::setShouldExit(bool quitHostApp)
     }
 
     m_ShouldExit = true;
+}
+
+void Session::showExitOverlay()
+{
+    // Centered pill that tells the visitor how to leave the stream. Text
+    // is intentionally plain ASCII because the bundled ModeSeven.ttf does
+    // not carry rich glyphs. Auto-hides after 3 seconds so it does not
+    // sit on top of the experience.
+    m_OverlayManager.updateOverlayText(Overlay::OverlayExitButton,
+                                       "[ BACK TO MENU ]    experiencenet");
+    m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, true);
+
+    QTimer::singleShot(3000, this, [this]() {
+        m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
+    });
+}
+
+bool Session::isPointInExitOverlay(int windowX, int windowY)
+{
+    // Hit region: top 60 px of the window, centered horizontally, 600 px wide.
+    // Matches the drawable-space pill we paint in the renderer; slight mismatch
+    // on retina displays is acceptable because visitors tap somewhere in the
+    // middle of the pill, not at the pixel edge.
+    int windowWidth = 0, windowHeight = 0;
+    if (m_Window != nullptr) {
+        SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
+    }
+    if (windowWidth <= 0 || windowHeight <= 0) {
+        return false;
+    }
+
+    // Only hit-testable while the overlay is actually on screen.
+    if (!m_OverlayManager.isOverlayEnabled(Overlay::OverlayExitButton)) {
+        // If the overlay is hidden, any tap in the top 60 px re-summons it
+        // rather than dismissing or quitting. Returning false here keeps the
+        // click flowing to the host; the re-summon path lives in input/mouse.cpp.
+        return false;
+    }
+
+    int pillWidth = std::min(600, windowWidth * 4 / 5);
+    int pillLeft = (windowWidth - pillWidth) / 2;
+    int pillRight = pillLeft + pillWidth;
+    const int pillTop = 0;
+    const int pillBottom = 60;
+
+    return windowX >= pillLeft && windowX <= pillRight &&
+           windowY >= pillTop && windowY <= pillBottom;
+}
+
+void Session::triggerExitFromOverlay()
+{
+    m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
+
+    // setShouldExit(false) matches the ctrl+alt+shift+Q path: lets the
+    // normal quitStarting / sessionFinished signals fire so StreamSegue.qml
+    // pops back to the kiosk grid cleanly.
+    setShouldExit(false);
 }
 
 void Session::start()

@@ -500,6 +500,11 @@ public:
                     renderRect.x = 0;
                     renderRect.y = m_LastDrawableHeight - overlayTexture.height;
                 }
+                else if (i == Overlay::OverlayExitButton) {
+                    // Top center, small margin from the top of the drawable
+                    renderRect.x = (m_LastDrawableWidth - overlayTexture.width) / 2.0f;
+                    renderRect.y = m_LastDrawableHeight - overlayTexture.height - 20;
+                }
 
                 renderRect.w = overlayTexture.width;
                 renderRect.h = overlayTexture.height;

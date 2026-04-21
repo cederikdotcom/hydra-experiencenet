@@ -16,6 +16,30 @@ HydraExperienceNet kiosk <HOST> --district <DISTRICT> --venue <VENUE>
 
 The host must already be paired (hydraheadflatscreen handles pairing automatically).
 
+## Exit-to-menu overlay (stream view)
+
+During an active stream, a pill-shaped overlay appears at the top center
+reading `[ BACK TO MENU ]    experiencenet`. Behaviour:
+
+- **On stream start:** the pill is visible for 3 seconds, then auto-hides.
+- **Re-summon:** move the mouse into the top 60 px of the window, or tap
+  anywhere within the top 60 px on a touchscreen. The pill reappears and
+  stays until the next 3-second timer elapses.
+- **Tap / click the pill:** triggers a clean disconnect. The existing
+  `quitStarting` → `sessionFinished` path returns the visitor to the
+  kiosk grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
+
+Implementation lives in `app/streaming/video/overlaymanager.{h,cpp}`
+(new `OverlayExitButton` type), `app/streaming/session.{h,cpp}`
+(`showExitOverlay`, `isPointInExitOverlay`, `triggerExitFromOverlay`),
+`app/streaming/input/mouse.cpp` and `app/streaming/input/abstouch.cpp`
+(hit testing and reveal gesture), and `app/streaming/video/ffmpeg-renderers/vt_metal.mm`
+plus `.../sdlvid.cpp` (top-center positioning).
+
+Other renderers (plvk, egl, d3d11va, dxva2, vaapi, vdpau, drm) do not yet
+position the overlay — the pill falls back to their default render position
+there. Kiosk deployments currently run on macOS (vt_metal) or SDL.
+
 ## Standard Moonlight Modes
 
 All upstream moonlight-qt commands still work:
