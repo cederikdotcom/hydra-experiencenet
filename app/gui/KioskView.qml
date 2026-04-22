@@ -139,9 +139,12 @@ Item {
             kioskRoot, 'statusPollTimer')
         statusPollTimer.triggered.connect(function() {
             fetchData("http://localhost:9740/api/v1/stream/status", function(data) {
-                if (data.status === "ready") {
-                    // Agent launches moonlight as separate process.
-                    // Kiosk stays behind it. Stop polling.
+                // The agent reports "idle" after a stream has exited
+                // (cleanup by waitForStreamExit in localapi.go). We used
+                // to only recognize "ready" which the agent never emits,
+                // so the kiosk stayed stuck on the "Starting..." overlay
+                // after a visitor hit Exit on the on-stream overlay.
+                if (data.status === "idle" || data.status === "ready") {
                     if (statusPollTimer) {
                         statusPollTimer.running = false
                         statusPollTimer.destroy()
@@ -159,9 +162,10 @@ Item {
                     }
                     streaming = false
                     streamingExperience = ""
-                    errorMessage = data.message || "Stream failed"
+                    errorMessage = data.error || data.message || "Stream failed"
                 }
-                // Otherwise keep polling (status is "starting" or similar)
+                // Otherwise keep polling (status is "starting", "pairing",
+                // "finding_body", or "streaming" — all in-progress states)
             })
         })
     }

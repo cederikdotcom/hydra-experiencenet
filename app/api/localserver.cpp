@@ -167,9 +167,20 @@ void LocalServer::handleWindowShow(QTcpSocket* socket)
 {
     QWindowList windows = QGuiApplication::topLevelWindows();
     for (QWindow* window : windows) {
-        window->show();
-        window->raise();
-        window->requestActivate();
+        // Tool windows (our exit overlay) stay where they are —
+        // they're floating NSPanels and don't need fullscreen.
+        // Main windows get re-sent into fullscreen because hide()
+        // on an already-fullscreen NSWindow in macOS can drop it
+        // out of its Space, so a subsequent show() brings it back
+        // as a plain windowed app instead of the kiosk display.
+        if ((window->flags() & Qt::Tool) == Qt::Tool) {
+            window->show();
+            window->raise();
+        } else {
+            window->showFullScreen();
+            window->raise();
+            window->requestActivate();
+        }
     }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "LocalServer: kiosk window shown");
     sendResponse(socket, 200, "application/json", "{\"status\":\"shown\"}");
