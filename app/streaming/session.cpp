@@ -1749,10 +1749,11 @@ void Session::showExitOverlay()
 
 bool Session::isPointInExitOverlay(int windowX, int windowY)
 {
-    // Hit region: top 60 px of the window, centered horizontally, 600 px wide.
-    // Matches the drawable-space pill we paint in the renderer; slight mismatch
-    // on retina displays is acceptable because visitors tap somewhere in the
-    // middle of the pill, not at the pixel edge.
+    // Generous hit region: the full width of the top 120 px of the window.
+    // The pill visually sits in the middle of this strip; expanding the hit
+    // area around it is safer than trying to match the font-measured width
+    // of "[ BACK TO MENU ]    experiencenet" which varies with the bundled
+    // monospace TTF and with retina scaling.
     int windowWidth = 0, windowHeight = 0;
     if (m_Window != nullptr) {
         SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
@@ -1763,24 +1764,25 @@ bool Session::isPointInExitOverlay(int windowX, int windowY)
 
     // Only hit-testable while the overlay is actually on screen.
     if (!m_OverlayManager.isOverlayEnabled(Overlay::OverlayExitButton)) {
-        // If the overlay is hidden, any tap in the top 60 px re-summons it
-        // rather than dismissing or quitting. Returning false here keeps the
-        // click flowing to the host; the re-summon path lives in input/mouse.cpp.
         return false;
     }
 
-    int pillWidth = std::min(600, windowWidth * 4 / 5);
-    int pillLeft = (windowWidth - pillWidth) / 2;
-    int pillRight = pillLeft + pillWidth;
     const int pillTop = 0;
-    const int pillBottom = 60;
+    const int pillBottom = 120;
 
-    return windowX >= pillLeft && windowX <= pillRight &&
-           windowY >= pillTop && windowY <= pillBottom;
+    bool hit = windowY >= pillTop && windowY <= pillBottom &&
+               windowX >= 0 && windowX <= windowWidth;
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "exit-overlay hit test: pt=(%d,%d) win=(%dx%d) hit=%d",
+                windowX, windowY, windowWidth, windowHeight, (int)hit);
+    return hit;
 }
 
 void Session::triggerExitFromOverlay()
 {
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "exit-overlay: tap received, requesting clean disconnect");
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
 
     // setShouldExit(false) matches the ctrl+alt+shift+Q path: lets the
