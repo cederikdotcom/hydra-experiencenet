@@ -38,12 +38,15 @@ Pieces involved:
    `KioskBridge.makeFollowAllSpaces(streamOverlayWindow)`. The bridge
    is a tiny QML-registered singleton (`platform/kioskbridge.h`) that
    invokes `makeWindowFollowAllSpaces()` in
-   `platform/macos_permissions.mm`, which sets
-   `NSWindowCollectionBehaviorCanJoinAllSpaces |
-    NSWindowCollectionBehaviorFullScreenAuxiliary |
-    NSWindowCollectionBehaviorStationary` on the overlay's NSWindow
-   so it appears on every Space including the kiosk's fullscreen
-   Space.
+   `platform/macos_permissions.mm`, which ORs
+   `NSWindowCollectionBehaviorCanJoinAllSpaces` into the overlay
+   NSWindow's collection behaviour so it appears on every Space
+   including the kiosk's fullscreen Space. v6.1.18 also tried
+   `FullScreenAuxiliary | Stationary`; that combination failed
+   `-[NSWindow _validateCollectionBehavior:]` on macOS 26 and
+   aborted the stream subprocess. v6.1.19 dropped those extras and
+   wrapped the call in `@try/@catch` so any future validation
+   regression becomes a log line instead of a crash.
 4. `enableKioskPresentation()` (still called from `main.cpp` on
    kiosk launch) sets `NSApplicationPresentationHideMenuBar |
    HideDock` and re-applies them on
