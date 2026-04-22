@@ -18,28 +18,37 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Kiosk view goes fullscreen on launch
 
-As of v6.1.15 the kiosk view:
+As of v6.1.16 the kiosk view:
 
-1. Sets `window.flags = Qt.Window | Qt.FramelessWindowHint` to drop
-   the macOS window title bar and traffic lights.
-2. Calls `window.showMaximized()` so the window fills the work area
-   without switching into a fullscreen Space (which would strand the
-   floating Qt exit overlay on the original Space).
-3. Relies on `enableKioskPresentation()` in
-   `app/platform/macos_permissions.mm` — called from `main.cpp` on
-   kiosk launch — to auto-hide the macOS menu bar and dock via
-   `NSApplication setPresentationOptions:
-    NSApplicationPresentationAutoHideMenuBar |
-    NSApplicationPresentationAutoHideDock`.
+1. Declares `Qt.Window | Qt.FramelessWindowHint` on the main
+   `ApplicationWindow` in `gui/main.qml`, gated on a `kioskMode`
+   context property that `main.cpp` sets to `true` on the kiosk
+   launch path. Setting the flags at declaration time is required on
+   macOS: changing flags on an already-visible window does not
+   recreate the underlying NSWindow styleMask, so the traffic lights
+   would stay visible.
+2. Calls `window.showMaximized()` in `KioskView.qml` so the window
+   fills the work area without switching into a fullscreen Space
+   (which would strand the floating Qt exit overlay on the original
+   Space).
+3. Calls `enableKioskPresentation()` from
+   `app/platform/macos_permissions.mm` (invoked in `main.cpp` on
+   kiosk launch) which sets
+   `NSApplicationPresentationHideMenuBar | HideDock` and also
+   re-applies those options on `NSApplicationDidBecomeActiveNotification`
+   so a brief activation of another app (e.g. Terminal for a
+   screenshot) doesn't leave the presentation options cleared.
 
-Together this gives a visually edge-to-edge kiosk without using true
-macOS fullscreen, so the floating Qt overlay window stays above the
-kiosk content the whole time.
+Together this gives an edge-to-edge kiosk without using true macOS
+fullscreen, so the floating Qt overlay window stays above the kiosk
+content the whole time.
 
 History: v6.1.11 used `showFullScreen()` briefly; v6.1.12 moved to
 `showMaximized()` after discovering the overlay was stranded on the
-old Space; v6.1.15 added `FramelessWindowHint` and the NSApplication
-presentation options to clean up the remaining chrome. The stream
+old Space; v6.1.15 added `FramelessWindowHint` (from QML runtime,
+too late) and `AutoHide` options; v6.1.16 moved the flags to
+declaration time via `kioskMode` and upgraded to `HideMenuBar |
+HideDock` with a re-apply on activation. The stream
 subcommand is launched by hydraheadflatscreen v2.0.28+ with
 `--display-mode borderless`, which is Moonlight-Qt's
 WM_FULLSCREEN_DESKTOP — a frameless fullscreen window that does NOT
