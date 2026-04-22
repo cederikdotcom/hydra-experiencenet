@@ -40,9 +40,10 @@ not follow into it.
 
 ## Exit-to-menu overlay (stream view and kiosk view)
 
-A subtle handle is visible at the centre of the screen both during an
-active stream and on the experience library (kiosk grid). Tapping it
-opens a small dropdown menu with a single "Exit experience" item.
+A subtle handle is visible at the top centre of the screen both during
+an active stream and on the experience library (kiosk grid). Tapping
+it opens a small dropdown menu with a single "Exit experience" item
+that slides out directly beneath the handle.
 
 **Implementation:** as of v6.1.10 the handle + dropdown are implemented
 as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
@@ -59,7 +60,7 @@ a Session reference beyond its lifetime. The older SDL/Metal overlay
 present during a transition period and will be removed in a later
 cleanup once the QML overlay is proven out. Behaviour:
 
-- **Handle (always visible):** a circle glyph at the dead centre of
+- **Handle (always visible):** a circle glyph at the top centre of
   the screen. Present throughout the stream and on the kiosk grid so
   the exit gesture is discoverable.
 - **Tap / click the handle:** toggles the dropdown. No disconnect yet.
