@@ -35,9 +35,14 @@ with a single "Exit experience" item. Behaviour:
   re-asserts the handle's visibility.
 
 The hit regions are deliberately larger than the rendered glyph / text
-so near-misses still land (160 x 120 px for the handle, 320 x 60 px for
-the menu item). A future iteration will replace the circle glyph with a
-Hydra SVG logo; the hit-region sizing stays the same.
+so near-misses still land, and they do NOT overlap: the handle occupies
+the top-right 160 x 80 px and the menu item occupies the next 320 x 80
+px strip just below (y=80-160). The menu is rendered as text on a
+translucent dark pill (24 x 12 px padding) so it reads as a clickable
+element against any stream content; the handle is plain white text on
+purpose to keep its subtle indicator feel. A future iteration will
+replace the circle glyph with a Hydra SVG logo; the hit-region sizing
+stays the same.
 
 **Required agent flag:** kiosks must run hydraheadflatscreen v2.0.26+
 which passes `--absolute-mouse` to the Moonlight stream subcommand.
