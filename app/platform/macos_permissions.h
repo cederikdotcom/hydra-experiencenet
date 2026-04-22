@@ -34,6 +34,13 @@ void requestLocalNetworkPermission();
 // top of the kiosk content.
 void enableKioskPresentation();
 
+// Configures an NSWindow so it appears on every macOS Space (including
+// any fullscreen Space another window is in), and floats above normal
+// windows. Used by the floating Qt exit overlay so it continues to sit
+// above the stream/kiosk even when the underlying window enters a
+// macOS fullscreen Space. Pass the QWindow's winId() as windowId.
+void makeWindowFollowAllSpaces(uint64_t windowId);
+
 // Captures the main display using ScreenCaptureKit (macOS 14+).
 // Captures everything including SDL Metal fullscreen content and across Spaces.
 // Returns a CGImageRef that the caller must release. Returns NULL on failure.

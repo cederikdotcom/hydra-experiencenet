@@ -13,6 +13,32 @@
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #include <dispatch/dispatch.h>
 
+void makeWindowFollowAllSpaces(uint64_t windowId)
+{
+    // winId() on macOS returns a pointer to the native NSView. The
+    // enclosing NSWindow is reached via `-window`. Setting
+    // CanJoinAllSpaces + FullScreenAuxiliary makes the window appear
+    // on every Space (including a fullscreen Space that belongs to
+    // another window of the same app) while still respecting the
+    // floating level from Qt.WindowStaysOnTopHint.
+    NSView* view = (__bridge NSView*)(void*)(uintptr_t)windowId;
+    if (view == nil) {
+        return;
+    }
+    NSWindow* win = [view window];
+    if (win == nil) {
+        return;
+    }
+    NSWindowCollectionBehavior behavior =
+        [win collectionBehavior] |
+        NSWindowCollectionBehaviorCanJoinAllSpaces |
+        NSWindowCollectionBehaviorFullScreenAuxiliary |
+        NSWindowCollectionBehaviorStationary;
+    [win setCollectionBehavior:behavior];
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "kiosk overlay: set window collectionBehavior to follow all Spaces");
+}
+
 void enableKioskPresentation()
 {
     // Fully hide the menu bar and dock, not auto-hide. We stay off of

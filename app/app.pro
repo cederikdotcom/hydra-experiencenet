@@ -407,7 +407,8 @@ macx {
 
     HEADERS += \
         streaming/video/ffmpeg-renderers/vt.h \
-        platform/macos_permissions.h
+        platform/macos_permissions.h \
+        platform/kioskbridge.h
 }
 discord-rpc {
     message(Discord integration enabled)

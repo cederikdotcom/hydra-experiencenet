@@ -3,6 +3,7 @@ import QtQuick.Controls 2.2
 import QtQuick.Window 2.2
 
 import Session 1.0
+import KioskBridge 1.0
 
 // Floating, frameless, translucent window that rides on top of the
 // streaming SDL window during an active session. Shows a subtle
@@ -29,6 +30,14 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     visible: false
+
+    // Ask the platform to mark this window so it appears on every
+    // macOS Space, including any fullscreen Space the kiosk or stream
+    // window enters. Must run after the Window has a native handle,
+    // which Component.onCompleted guarantees.
+    Component.onCompleted: {
+        KioskBridge.makeFollowAllSpaces(streamOverlayWindow)
+    }
 
     // Keep the window click-through for the transparent gaps between
     // the handle and the menu, but still responsive to clicks on the

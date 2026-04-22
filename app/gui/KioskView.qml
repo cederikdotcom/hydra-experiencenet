@@ -29,20 +29,14 @@ Item {
         // lights by setting FramelessWindowHint so the end result is
         // edge-to-edge kiosk chrome without losing the overlay.
         if (typeof window !== "undefined" && window !== null) {
-            // flags are set at the ApplicationWindow declaration via
-            // the kioskMode context property, not here.
-            //
-            // Size to the FULL screen bounds rather than calling
-            // showMaximized(): the presentation options hide the menu
-            // bar and dock, but the work area that showMaximized() uses
-            // is still calculated against the original non-hidden
-            // geometry, leaving a strip of wallpaper around the kiosk.
-            // Setting x/y/width/height explicitly takes all of it.
-            window.x = 0
-            window.y = 0
-            window.width = Screen.width
-            window.height = Screen.height
-            window.show()
+            // Go into real macOS fullscreen (a new Space) now that the
+            // floating exit overlay window has been marked with
+            // NSWindowCollectionBehaviorCanJoinAllSpaces, so it still
+            // sits above the kiosk when we enter that Space. This is
+            // the only reliable way to cover every pixel of the
+            // display (menu bar area included) without wrestling with
+            // macOS work-area math.
+            window.showFullScreen()
         }
 
         // Bring up the floating exit overlay so the handle and dropdown
