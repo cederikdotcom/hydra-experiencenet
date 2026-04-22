@@ -17,13 +17,14 @@ Window {
     property int menuHeight: 52
     property int menuWidth: 220
 
-    // Center the window on the primary screen. The handle sits at the
-    // top of this mini-window and the dropdown slides down below it,
-    // so the effective visual center is around the handle itself.
+    // Horizontal centre of the primary screen, small margin from the
+    // top so the handle hangs just below the menu bar. Window is tall
+    // enough to cover both the handle and the expanded dropdown that
+    // slides out directly beneath it.
     width: menuWidth
     height: handleSize + 8 + menuHeight
     x: (Screen.width - width) / 2
-    y: (Screen.height - height) / 2
+    y: 24
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
