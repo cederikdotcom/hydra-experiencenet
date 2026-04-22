@@ -18,9 +18,16 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Kiosk view goes fullscreen on launch
 
-As of v6.1.11 the kiosk view calls `window.showFullScreen()` in
+As of v6.1.12 the kiosk view calls `window.showMaximized()` in
 `KioskView.qml`'s `StackView.onActivated` handler so the experience
-library fills the display with no window chrome on startup. The stream
+library fills the display without creating a separate macOS Space.
+We used `showFullScreen()` briefly in v6.1.11 but that created a
+Space that the floating Qt overlay window could not follow into, so
+the ⋯ exit handle disappeared on the kiosk view. Maximized keeps
+everything on the same Space at the cost of the macOS menu bar
+remaining visible at the very top; iterating on that (hiding menu
+bar + dock via `NSApplication -setPresentationOptions`) is a later
+polish step. The stream
 subcommand is launched by hydraheadflatscreen v2.0.28+ with
 `--display-mode borderless`, which is Moonlight-Qt's
 WM_FULLSCREEN_DESKTOP — a frameless fullscreen window that does NOT

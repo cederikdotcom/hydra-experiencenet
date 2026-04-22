@@ -18,11 +18,16 @@ Item {
     StackView.onActivated: {
         toolBar.visible = false
 
-        // Go fullscreen so the kiosk occupies the whole display with no
-        // window chrome. The ApplicationWindow is reachable by its 'window'
-        // id defined in main.qml.
+        // Maximize the kiosk window. We specifically AVOID
+        // window.showFullScreen() on macOS because that creates a
+        // separate macOS Space, and the floating Qt overlay window
+        // that holds our ⋯ exit handle is stuck on the original
+        // Space and would disappear. Maximized keeps us on the same
+        // Space so the overlay stays visible; the macOS menu bar is
+        // still visible at the very top of the screen but the kiosk
+        // fills the rest of the display.
         if (typeof window !== "undefined" && window !== null) {
-            window.showFullScreen()
+            window.showMaximized()
         }
 
         // Bring up the floating exit overlay so the handle and dropdown
