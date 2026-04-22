@@ -17,14 +17,13 @@ Window {
     property int menuHeight: 52
     property int menuWidth: 220
 
-    // Anchor the window to the top-right of the primary screen with
-    // a small margin so the handle sits comfortably above the stream.
-    x: Screen.width - width - 24
-    y: 24
+    // Center the window on the primary screen. The handle sits at the
+    // top of this mini-window and the dropdown slides down below it,
+    // so the effective visual center is around the handle itself.
     width: menuWidth
-    // Reserve space for the expanded menu too so the window's input
-    // surface covers the dropdown area when it opens.
     height: handleSize + 8 + menuHeight
+    x: (Screen.width - width) / 2
+    y: (Screen.height - height) / 2
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
@@ -36,7 +35,7 @@ Window {
     Rectangle {
         id: handleButton
         anchors.top: parent.top
-        anchors.right: parent.right
+        anchors.horizontalCenter: parent.horizontalCenter
         width: handleSize
         height: handleSize
         radius: handleSize / 2
@@ -68,7 +67,7 @@ Window {
         visible: false
         anchors.top: handleButton.bottom
         anchors.topMargin: 8
-        anchors.right: parent.right
+        anchors.horizontalCenter: parent.horizontalCenter
         width: menuWidth
         height: menuHeight
         color: exitArea.containsMouse ? "#E0000000" : "#CC000000"
