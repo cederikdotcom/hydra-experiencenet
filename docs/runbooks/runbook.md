@@ -18,16 +18,18 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Exit-to-menu overlay (stream view)
 
-During an active stream, a pill-shaped overlay appears at the top center
+During an active stream, a pill-shaped overlay is visible at the top center
 reading `[ BACK TO MENU ]    experiencenet`. Behaviour:
 
-- **On stream start:** the pill is visible for 3 seconds, then auto-hides.
-- **Re-summon:** move the mouse into the top 60 px of the window, or tap
-  anywhere within the top 60 px on a touchscreen. The pill reappears and
-  stays until the next 3-second timer elapses.
+- **Always visible:** the pill stays on screen for the whole stream so
+  the exit gesture is discoverable at a glance. No auto-hide.
 - **Tap / click the pill:** triggers a clean disconnect. The existing
   `quitStarting` → `sessionFinished` path returns the visitor to the
   kiosk grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
+- **Reveal strip** (legacy, kept harmless): a mouse move or finger tap
+  in the top 60 px re-asserts the overlay's visibility. With the always-on
+  default above, this is a no-op but remains wired in case a future change
+  opts back in to auto-hide.
 
 Implementation lives in `app/streaming/video/overlaymanager.{h,cpp}`
 (new `OverlayExitButton` type), `app/streaming/session.{h,cpp}`

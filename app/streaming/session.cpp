@@ -7,7 +7,6 @@
 #include "SDL_compat.h"
 #include "utils.h"
 
-#include <QTimer>
 #include <algorithm>
 
 #ifdef HAVE_FFMPEG
@@ -1741,15 +1740,11 @@ void Session::showExitOverlay()
 {
     // Centered pill that tells the visitor how to leave the stream. Text
     // is intentionally plain ASCII because the bundled ModeSeven.ttf does
-    // not carry rich glyphs. Auto-hides after 3 seconds so it does not
-    // sit on top of the experience.
+    // not carry rich glyphs. Stays visible for the whole stream so the
+    // exit gesture is always discoverable.
     m_OverlayManager.updateOverlayText(Overlay::OverlayExitButton,
                                        "[ BACK TO MENU ]    experiencenet");
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, true);
-
-    QTimer::singleShot(3000, this, [this]() {
-        m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
-    });
 }
 
 bool Session::isPointInExitOverlay(int windowX, int windowY)
