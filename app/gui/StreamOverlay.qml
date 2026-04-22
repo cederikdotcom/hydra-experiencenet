@@ -10,6 +10,14 @@ import KioskBridge 1.0
 // circular handle that expands into a dropdown menu with a single
 // "Exit experience" item. Click hit-testing, hover, and animations
 // are handled natively by Qt Quick — no SDL overlay coordinate math.
+//
+// When the visitor taps "Exit experience", the window briefly
+// expands to fullscreen with a black veil and a "Quitting
+// experience" label to cover the macOS Space transition between the
+// stream subprocess closing and the kiosk regaining its fullscreen
+// Space. A hard timeout collapses the veil back regardless of how
+// that transition plays out so the user can never get stuck behind
+// a black screen.
 Window {
     id: streamOverlayWindow
 
@@ -17,33 +25,89 @@ Window {
     property int handleSize: 40
     property int menuHeight: 52
     property int menuWidth: 220
+    property bool quitting: false
 
-    // Horizontal centre of the primary screen, small margin from the
-    // top so the handle hangs just below the menu bar. Window is tall
-    // enough to cover both the handle and the expanded dropdown that
-    // slides out directly beneath it.
-    width: menuWidth
-    height: handleSize + 8 + menuHeight
-    x: (Screen.width - width) / 2
-    y: 24
+    // Base (collapsed) geometry for the handle + dropdown. The window
+    // switches between this and fullscreen bounds via the `quitting`
+    // state; keeping both paths explicit here means failures in the
+    // quitting flow just leave the window at its collapsed size
+    // instead of anywhere weird.
+    readonly property int collapsedWidth: menuWidth
+    readonly property int collapsedHeight: handleSize + 8 + menuHeight
+    readonly property int collapsedX: (Screen.width - collapsedWidth) / 2
+    readonly property int collapsedY: 24
+
+    width: collapsedWidth
+    height: collapsedHeight
+    x: collapsedX
+    y: collapsedY
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     visible: false
 
-    // Ask the platform to mark this window so it appears on every
-    // macOS Space, including any fullscreen Space the kiosk or stream
-    // window enters. Must run after the Window has a native handle,
-    // which Component.onCompleted guarantees.
     Component.onCompleted: {
+        // Ask the platform to mark this window so it appears on every
+        // macOS Space, including any fullscreen Space the kiosk or
+        // stream window enters.
         KioskBridge.makeFollowAllSpaces(streamOverlayWindow)
     }
 
-    // Keep the window click-through for the transparent gaps between
-    // the handle and the menu, but still responsive to clicks on the
-    // handle and menu rectangles themselves.
+    // Timer safeguard: no matter what, shrink the window back to its
+    // collapsed geometry after a second and a half. Guards against the
+    // kiosk Space taking unusually long to become active (or never
+    // doing so) leaving the visitor looking at an opaque black
+    // overlay.
+    Timer {
+        id: collapseTimer
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            streamOverlayWindow.quitting = false
+        }
+    }
+
+    onQuittingChanged: {
+        if (quitting) {
+            streamOverlayWindow.width = Screen.width
+            streamOverlayWindow.height = Screen.height
+            streamOverlayWindow.x = 0
+            streamOverlayWindow.y = 0
+        } else {
+            streamOverlayWindow.width = collapsedWidth
+            streamOverlayWindow.height = collapsedHeight
+            streamOverlayWindow.x = collapsedX
+            streamOverlayWindow.y = collapsedY
+        }
+    }
+
+    // Fullscreen black veil shown during the exit transition. Covers
+    // the macOS desktop flash that was visible between the stream
+    // Space collapsing and the kiosk Space coming forward.
+    Rectangle {
+        id: quittingVeil
+        anchors.fill: parent
+        visible: streamOverlayWindow.quitting
+        color: "#0a0a0a"
+
+        // Block any stray click from reaching whatever is underneath
+        // during the transition — avoids accidentally tapping kiosk
+        // tiles that flicker through on the way back.
+        MouseArea {
+            anchors.fill: parent
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: qsTr("Quitting experience")
+            color: "#ffffff"
+            font.pixelSize: 22
+        }
+    }
+
     Rectangle {
         id: handleButton
+        visible: !streamOverlayWindow.quitting
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         width: handleSize
@@ -66,6 +130,7 @@ Window {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            enabled: !streamOverlayWindow.quitting
             onClicked: {
                 exitDropdown.visible = !exitDropdown.visible
             }
@@ -97,13 +162,16 @@ Window {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            enabled: !streamOverlayWindow.quitting
             onClicked: {
                 exitDropdown.visible = false
                 if (streamOverlayWindow.session !== null) {
-                    // Real exit path: hide the whole overlay and ask
-                    // the session to disconnect so StreamSegue can take
-                    // us back to the kiosk grid.
-                    streamOverlayWindow.visible = false
+                    // Real exit path: expand to fullscreen black veil
+                    // to cover the stream-Space → kiosk-Space hand-off,
+                    // then ask the session to disconnect. A safety
+                    // timer collapses the veil back unconditionally.
+                    streamOverlayWindow.quitting = true
+                    collapseTimer.restart()
                     streamOverlayWindow.session.triggerExitFromMenu()
                 }
                 // If session is null (kiosk grid context), there's
