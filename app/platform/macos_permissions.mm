@@ -29,14 +29,26 @@ void makeWindowFollowAllSpaces(uint64_t windowId)
     if (win == nil) {
         return;
     }
-    NSWindowCollectionBehavior behavior =
-        [win collectionBehavior] |
-        NSWindowCollectionBehaviorCanJoinAllSpaces |
-        NSWindowCollectionBehaviorFullScreenAuxiliary |
-        NSWindowCollectionBehaviorStationary;
-    [win setCollectionBehavior:behavior];
-    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "kiosk overlay: set window collectionBehavior to follow all Spaces");
+    // Only CanJoinAllSpaces. The previous attempt also ORed in
+    // FullScreenAuxiliary and Stationary; that combination failed
+    // -[NSWindow _validateCollectionBehavior:] on macOS 26 and caused
+    // HydraExperienceNet to crash with SIGABRT on stream launch.
+    // CanJoinAllSpaces on its own is enough to make the overlay
+    // appear on every Space, including another window's fullscreen
+    // Space.
+    @try {
+        NSWindowCollectionBehavior behavior =
+            [win collectionBehavior] |
+            NSWindowCollectionBehaviorCanJoinAllSpaces;
+        [win setCollectionBehavior:behavior];
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "kiosk overlay: set window collectionBehavior to follow all Spaces");
+    }
+    @catch (NSException *e) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "kiosk overlay: setCollectionBehavior failed: %s",
+                     [[e reason] UTF8String]);
+    }
 }
 
 void enableKioskPresentation()
