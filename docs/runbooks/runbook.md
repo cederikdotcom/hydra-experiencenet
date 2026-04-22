@@ -16,6 +16,26 @@ HydraExperienceNet kiosk <HOST> --district <DISTRICT> --venue <VENUE>
 
 The host must already be paired (hydraheadflatscreen handles pairing automatically).
 
+## Kiosk loading screen (tile tap to first frame)
+
+The stream subprocess reuses the kiosk's fullscreen chrome during the
+connection phase so the transition from the tile grid to first video
+frame stays edge-to-edge and branded:
+
+- `main.cpp` sets `kioskMode=true` for the `stream` subcommand as
+  well, so the frameless window flag applies from declaration time.
+- `CliStartStreamSegue.qml` calls `window.showFullScreen()` on
+  `StackView.onActivated` and paints a dark backdrop with a centered
+  `BusyIndicator` + "Loading experience" label.
+- `StreamSegue.qml` shows the same backdrop and friendly label
+  instead of the per-stage Moonlight text ("Starting control
+  connection", "RTSP handshake", etc) that is engineer-speak.
+- `app/cli/pair.cpp` treats an already-paired body as success
+  instead of the original Moonlight-Qt "X is already paired" error
+  dialog. The kiosk agent re-runs the pair subcommand before every
+  stream to refresh credentials, so the dialog fired on every
+  launch.
+
 ## Kiosk view goes fullscreen on launch
 
 As of v6.1.18 the kiosk view uses a **real macOS fullscreen Space**
