@@ -16,7 +16,22 @@ HydraExperienceNet kiosk <HOST> --district <DISTRICT> --venue <VENUE>
 
 The host must already be paired (hydraheadflatscreen handles pairing automatically).
 
-## Exit-to-menu overlay (stream view)
+## Kiosk view goes fullscreen on launch
+
+As of v6.1.11 the kiosk view calls `window.showFullScreen()` in
+`KioskView.qml`'s `StackView.onActivated` handler so the experience
+library fills the display with no window chrome on startup. The stream
+subcommand is launched by hydraheadflatscreen v2.0.28+ with
+`--display-mode borderless`, which is Moonlight-Qt's
+WM_FULLSCREEN_DESKTOP — a frameless fullscreen window that does NOT
+create a separate macOS Space, so the floating Qt exit overlay can
+stay on top of it.
+
+Do not switch the stream to `--display-mode fullscreen` (true macOS
+fullscreen): that creates a new Space and the exit overlay window does
+not follow into it.
+
+## Exit-to-menu overlay (stream view and kiosk view)
 
 During an active stream, a subtle handle is visible at the top-right of
 the screen. Tapping it opens a small dropdown menu with a single
@@ -24,7 +39,11 @@ the screen. Tapping it opens a small dropdown menu with a single
 
 **Implementation:** as of v6.1.10 the handle + dropdown are implemented
 as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
-loaded by `StreamSegue.qml` when the stream connection starts. Qt Quick
+loaded by `StreamSegue.qml` when the stream connection starts. v6.1.11
+extends this so `KioskView.qml` loads the same overlay as soon as the
+experience library activates, which means the handle is also visible on
+the grid. When no Session is bound (kiosk view), the overlay's tap handler
+no-ops — the handle is purely for visual consistency there. Qt Quick
 handles hit testing, hover, and click routing natively — no SDL drawable
 coordinate math, no interaction with the Moonlight mouse capture mode.
 The window is destroyed on `sessionReadyForDeletion` so it does not hold

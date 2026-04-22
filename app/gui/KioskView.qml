@@ -17,7 +17,38 @@ Item {
 
     StackView.onActivated: {
         toolBar.visible = false
+
+        // Go fullscreen so the kiosk occupies the whole display with no
+        // window chrome. The ApplicationWindow is reachable by its 'window'
+        // id defined in main.qml.
+        if (typeof window !== "undefined" && window !== null) {
+            window.showFullScreen()
+        }
+
+        // Bring up the floating exit overlay so the handle and dropdown
+        // are available on the experience library too, not only during a
+        // stream. StreamOverlay.qml tolerates a null session (tap becomes
+        // a no-op) so it's safe to show here.
+        if (kioskOverlayLoader.item === null) {
+            kioskOverlayLoader.active = true
+        }
+        if (kioskOverlayLoader.item !== null) {
+            kioskOverlayLoader.item.visible = true
+        }
+
         fetchConfig()
+    }
+
+    StackView.onDeactivating: {
+        if (kioskOverlayLoader.item !== null) {
+            kioskOverlayLoader.item.visible = false
+        }
+    }
+
+    Loader {
+        id: kioskOverlayLoader
+        active: false
+        source: "qrc:/gui/StreamOverlay.qml"
     }
 
     // HTTP helper: GET
