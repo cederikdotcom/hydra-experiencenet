@@ -27,10 +27,13 @@ As of v6.1.16 the kiosk view:
    macOS: changing flags on an already-visible window does not
    recreate the underlying NSWindow styleMask, so the traffic lights
    would stay visible.
-2. Calls `window.showMaximized()` in `KioskView.qml` so the window
-   fills the work area without switching into a fullscreen Space
-   (which would strand the floating Qt exit overlay on the original
-   Space).
+2. Sizes the window to the full `Screen.width`/`Screen.height` in
+   `KioskView.qml`. `showMaximized()` used to be enough but it
+   sizes to the pre-hide work area and left a strip of wallpaper
+   around the kiosk once the menu bar and dock were hidden, so
+   v6.1.17 switched to an explicit `x/y/width/height = 0/0/Screen`
+   assignment before `show()`. Still no macOS fullscreen Space,
+   still safe for the floating Qt exit overlay.
 3. Calls `enableKioskPresentation()` from
    `app/platform/macos_permissions.mm` (invoked in `main.cpp` on
    kiosk launch) which sets
