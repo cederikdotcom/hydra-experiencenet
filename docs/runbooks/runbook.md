@@ -18,18 +18,34 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Exit-to-menu overlay (stream view)
 
-During an active stream, a pill-shaped overlay is visible at the top center
-reading `[ BACK TO MENU ]    experiencenet`. Behaviour:
+During an active stream, a subtle circle handle is visible at the
+top-right of the stream window. Tapping it opens a small dropdown menu
+with a single "Exit experience" item. Behaviour:
 
-- **Always visible:** the pill stays on screen for the whole stream so
-  the exit gesture is discoverable at a glance. No auto-hide.
-- **Tap / click the pill:** triggers a clean disconnect. The existing
-  `quitStarting` → `sessionFinished` path returns the visitor to the
-  kiosk grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
-- **Reveal strip** (legacy, kept harmless): a mouse move or finger tap
-  in the top 60 px re-asserts the overlay's visibility. With the always-on
-  default above, this is a no-op but remains wired in case a future change
-  opts back in to auto-hide.
+- **Handle (always visible):** a circle glyph at the top-right. Small
+  enough to stay out of the way of whatever is on-screen, but present
+  throughout the stream so the exit gesture is discoverable.
+- **Tap / click the handle:** toggles the dropdown. No disconnect yet.
+- **Tap / click "Exit experience":** triggers a clean disconnect. The
+  existing `quitStarting` → `sessionFinished` path returns the visitor
+  to the kiosk grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
+- **Tap anywhere else while the menu is open:** collapses the dropdown
+  back to just the circle handle.
+- **Reveal strip** (legacy, kept harmless): a tap in the top 60 px
+  re-asserts the handle's visibility.
+
+The hit regions are deliberately larger than the rendered glyph / text
+so near-misses still land (160 x 120 px for the handle, 320 x 60 px for
+the menu item). A future iteration will replace the circle glyph with a
+Hydra SVG logo; the hit-region sizing stays the same.
+
+**Required agent flag:** kiosks must run hydraheadflatscreen v2.0.26+
+which passes `--absolute-mouse` to the Moonlight stream subcommand.
+Without it, clicks are reported near the window centre regardless of
+where the visitor physically moves the mouse, and no top-right hit
+region is reachable. See the hydraheadflatscreen runbook section
+"Mouse cursor is captured / clicks all land near centre of window"
+for the full picture.
 
 Implementation lives in `app/streaming/video/overlaymanager.{h,cpp}`
 (new `OverlayExitButton` type), `app/streaming/session.{h,cpp}`

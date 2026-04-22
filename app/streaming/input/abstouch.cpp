@@ -82,14 +82,19 @@ void SdlInputHandler::handleAbsoluteFingerEvent(SDL_TouchFingerEvent* event)
 
         Session* session = Session::get();
         if (session != nullptr) {
+            if (session->isPointInExitMenu(pixelX, pixelY)) {
+                session->triggerExitFromMenu();
+                return;
+            }
             if (session->isPointInExitOverlay(pixelX, pixelY)) {
                 session->triggerExitFromOverlay();
                 return;
             }
+            if (session->isExitMenuOpen()) {
+                session->closeExitMenu();
+                return;
+            }
             if (pixelY <= EXIT_OVERLAY_TOUCH_REVEAL_HEIGHT) {
-                // Summon the overlay back after it has auto-hidden. Still
-                // return here so the finger-down does not get forwarded to
-                // the host experience, keeping the reveal gesture harmless.
                 session->showExitOverlay();
                 return;
             }

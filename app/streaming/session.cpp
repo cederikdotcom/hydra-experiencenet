@@ -1740,22 +1740,25 @@ void Session::showExitOverlay()
 {
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "exit-overlay: showExitOverlay called");
 
-    // Centered pill that tells the visitor how to leave the stream. Text
-    // is intentionally plain ASCII because the bundled ModeSeven.ttf does
-    // not carry rich glyphs. Stays visible for the whole stream so the
-    // exit gesture is always discoverable.
-    m_OverlayManager.updateOverlayText(Overlay::OverlayExitButton,
-                                       "[ BACK TO MENU ]    experiencenet");
+    // Subtle circle handle at the top-right of the stream. Small enough to
+    // stay out of the way of whatever is happening on-screen, but present
+    // throughout the stream so the exit gesture is always discoverable.
+    // Placeholder glyph for now; a Hydra SVG logo would replace this in a
+    // later iteration.
+    m_OverlayManager.updateOverlayText(Overlay::OverlayExitButton, "\xE2\x97\x8F");
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, true);
+
+    // Start in the collapsed state so the menu body is hidden until the
+    // visitor intentionally opens it by tapping the handle.
+    m_ExitMenuOpen = false;
+    m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
 }
 
 bool Session::isPointInExitOverlay(int windowX, int windowY)
 {
-    // Generous hit region: the full width of the top 120 px of the window.
-    // The pill visually sits in the middle of this strip; expanding the hit
-    // area around it is safer than trying to match the font-measured width
-    // of "[ BACK TO MENU ]    experiencenet" which varies with the bundled
-    // monospace TTF and with retina scaling.
+    // Hit region covers the top-right corner of the stream window. It is
+    // deliberately larger than the visible glyph so near-misses still land:
+    // a 160 x 120 pixel rectangle anchored to the right edge.
     int windowWidth = 0, windowHeight = 0;
     if (m_Window != nullptr) {
         SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
@@ -1764,19 +1767,22 @@ bool Session::isPointInExitOverlay(int windowX, int windowY)
         return false;
     }
 
-    // Only hit-testable while the overlay is actually on screen.
     if (!m_OverlayManager.isOverlayEnabled(Overlay::OverlayExitButton)) {
         return false;
     }
 
-    const int pillTop = 0;
-    const int pillBottom = 120;
+    const int handleWidth = 160;
+    const int handleHeight = 120;
+    const int handleLeft = windowWidth - handleWidth;
+    const int handleRight = windowWidth;
+    const int handleTop = 0;
+    const int handleBottom = handleHeight;
 
-    bool hit = windowY >= pillTop && windowY <= pillBottom &&
-               windowX >= 0 && windowX <= windowWidth;
+    bool hit = windowX >= handleLeft && windowX <= handleRight &&
+               windowY >= handleTop && windowY <= handleBottom;
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "exit-overlay hit test: pt=(%d,%d) win=(%dx%d) hit=%d",
+                "exit-overlay handle hit test: pt=(%d,%d) win=(%dx%d) hit=%d",
                 windowX, windowY, windowWidth, windowHeight, (int)hit);
     return hit;
 }
@@ -1784,13 +1790,79 @@ bool Session::isPointInExitOverlay(int windowX, int windowY)
 void Session::triggerExitFromOverlay()
 {
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                "exit-overlay: tap received, requesting clean disconnect");
+                "exit-overlay: handle tapped, toggling menu (was open=%d)",
+                (int)m_ExitMenuOpen);
+
+    // Tapping the circle handle toggles the dropdown. The actual disconnect
+    // happens only when the visitor taps an item inside the expanded menu.
+    m_ExitMenuOpen = !m_ExitMenuOpen;
+    if (m_ExitMenuOpen) {
+        m_OverlayManager.updateOverlayText(Overlay::OverlayExitMenu,
+                                           "[ exit experience ]");
+        m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, true);
+    } else {
+        m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
+    }
+}
+
+bool Session::isPointInExitMenu(int windowX, int windowY)
+{
+    // Only hit-testable when the menu is actually open. Sits directly
+    // beneath the circle handle in the top-right corner and is roughly
+    // the same width as the handle's hit region so taps feel aligned.
+    if (!m_ExitMenuOpen) {
+        return false;
+    }
+    if (!m_OverlayManager.isOverlayEnabled(Overlay::OverlayExitMenu)) {
+        return false;
+    }
+
+    int windowWidth = 0, windowHeight = 0;
+    if (m_Window != nullptr) {
+        SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
+    }
+    if (windowWidth <= 0 || windowHeight <= 0) {
+        return false;
+    }
+
+    const int menuWidth = 320;
+    const int menuHeight = 60;
+    const int menuLeft = windowWidth - menuWidth;
+    const int menuRight = windowWidth;
+    const int menuTop = 120;
+    const int menuBottom = menuTop + menuHeight;
+
+    bool hit = windowX >= menuLeft && windowX <= menuRight &&
+               windowY >= menuTop && windowY <= menuBottom;
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "exit-overlay menu hit test: pt=(%d,%d) hit=%d",
+                windowX, windowY, (int)hit);
+    return hit;
+}
+
+void Session::triggerExitFromMenu()
+{
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "exit-overlay: menu item tapped, requesting clean disconnect");
+    m_ExitMenuOpen = false;
+    m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
 
-    // setShouldExit(false) matches the ctrl+alt+shift+Q path: lets the
-    // normal quitStarting / sessionFinished signals fire so StreamSegue.qml
-    // pops back to the kiosk grid cleanly.
+    // setShouldExit(false) matches the ctrl+alt+shift+Q path so the
+    // existing quitStarting / sessionFinished signals return the visitor
+    // to the kiosk grid without forcing the host app to quit.
     setShouldExit(false);
+}
+
+void Session::closeExitMenu()
+{
+    if (!m_ExitMenuOpen) {
+        return;
+    }
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "exit-overlay: collapsing menu");
+    m_ExitMenuOpen = false;
+    m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
 }
 
 void Session::start()

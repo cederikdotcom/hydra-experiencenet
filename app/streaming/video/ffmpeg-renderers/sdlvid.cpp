@@ -247,11 +247,18 @@ void SdlRenderer::renderOverlay(Overlay::OverlayType type)
                 m_OverlayRects[type].y = 0;
             }
             else if (type == Overlay::OverlayExitButton) {
-                // Top center
+                // Top right
                 SDL_Rect viewportRect;
                 SDL_RenderGetViewport(m_Renderer, &viewportRect);
-                m_OverlayRects[type].x = (viewportRect.w - newSurface->w) / 2;
+                m_OverlayRects[type].x = viewportRect.w - newSurface->w - 30;
                 m_OverlayRects[type].y = 20;
+            }
+            else if (type == Overlay::OverlayExitMenu) {
+                // Right-aligned beneath the exit button
+                SDL_Rect viewportRect;
+                SDL_RenderGetViewport(m_Renderer, &viewportRect);
+                m_OverlayRects[type].x = viewportRect.w - newSurface->w - 30;
+                m_OverlayRects[type].y = 80;
             }
 
             m_OverlayRects[type].w = newSurface->w;

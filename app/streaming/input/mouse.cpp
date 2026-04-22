@@ -24,21 +24,36 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 
     // Exit-overlay tap handling runs BEFORE the SDL_TOUCH_MOUSEID filter so
     // trackpad taps (which often come through as synthetic mouse events on
-    // macOS) still trigger the clean disconnect. The host doesn't see these
-    // clicks either way because we return after handling them.
+    // macOS) still reach the handle / menu. Order matters: test the menu
+    // item first so its hit region takes precedence over the generic
+    // top-edge reveal strip when the menu is open.
     if (event->button == SDL_BUTTON_LEFT && event->state == SDL_PRESSED) {
         Session* session = Session::get();
-        if (session != nullptr && session->isPointInExitOverlay(event->x, event->y)) {
-            session->triggerExitFromOverlay();
-            return;
-        }
+        if (session != nullptr) {
+            if (session->isPointInExitMenu(event->x, event->y)) {
+                session->triggerExitFromMenu();
+                return;
+            }
+            if (session->isPointInExitOverlay(event->x, event->y)) {
+                session->triggerExitFromOverlay();
+                return;
+            }
 
-        // Even if the overlay is currently hidden, a tap in the top reveal
-        // strip summons it rather than being forwarded to the host. Keeps
-        // the exit gesture discoverable on pure-touch kiosks.
-        if (session != nullptr && event->y <= EXIT_OVERLAY_REVEAL_HEIGHT) {
-            session->showExitOverlay();
-            return;
+            // Tapping anywhere else while the menu is open collapses it,
+            // so the gesture feels like a normal dropdown. The click is
+            // then consumed so the host doesn't see a stray button press.
+            if (session->isExitMenuOpen()) {
+                session->closeExitMenu();
+                return;
+            }
+
+            // Fall back to the legacy top-edge reveal so a kiosk visitor
+            // who is tapping the top strip still gets the handle to appear
+            // even if the always-on path somehow missed it.
+            if (event->y <= EXIT_OVERLAY_REVEAL_HEIGHT) {
+                session->showExitOverlay();
+                return;
+            }
         }
     }
 

@@ -501,9 +501,17 @@ public:
                     renderRect.y = m_LastDrawableHeight - overlayTexture.height;
                 }
                 else if (i == Overlay::OverlayExitButton) {
-                    // Top center, small margin from the top of the drawable
-                    renderRect.x = (m_LastDrawableWidth - overlayTexture.width) / 2.0f;
+                    // Top right, small margin from the top-right corner of
+                    // the drawable. Kept subtle so it doesn't compete with
+                    // whatever the streamed experience is showing.
+                    renderRect.x = m_LastDrawableWidth - overlayTexture.width - 30;
                     renderRect.y = m_LastDrawableHeight - overlayTexture.height - 20;
+                }
+                else if (i == Overlay::OverlayExitMenu) {
+                    // Dropdown body: sits directly beneath the circle
+                    // handle, right-aligned so the two feel attached.
+                    renderRect.x = m_LastDrawableWidth - overlayTexture.width - 30;
+                    renderRect.y = m_LastDrawableHeight - overlayTexture.height - 80;
                 }
 
                 renderRect.w = overlayTexture.width;

@@ -125,19 +125,35 @@ public:
 
     void setShouldExit(bool quitHostApp = false);
 
-    // Shows the on-stream exit overlay for 3 seconds so kiosk visitors
-    // can discover how to return to the experience grid.
+    // Shows the subtle circle handle at the top-right of the stream so
+    // visitors can discover how to return to the experience grid.
     void showExitOverlay();
 
-    // Tests whether a window-space point lies inside the on-stream exit
-    // overlay's hit region. Returns true when the overlay is visible and
-    // the point is within the rectangle we draw.
+    // Tests whether a window-space point lies inside the circle handle's
+    // hit region. Returns true when the handle is visible and the point
+    // is within its clickable rectangle.
     bool isPointInExitOverlay(int windowX, int windowY);
 
-    // Triggered when the visitor taps the on-stream exit overlay. Hides
-    // the overlay and asks the session to disconnect cleanly so the
-    // existing quitStarting / sessionFinished path returns to the kiosk.
+    // Triggered when the visitor taps the circle handle. Toggles the
+    // dropdown menu between hidden and visible states.
     void triggerExitFromOverlay();
+
+    // Tests whether a window-space point lies inside the expanded menu's
+    // "Exit experience" item. Only true when the menu is currently open.
+    bool isPointInExitMenu(int windowX, int windowY);
+
+    // Triggered when the visitor taps the "Exit experience" item in the
+    // expanded menu. Hides overlays and asks the session to disconnect
+    // cleanly so StreamSegue returns to the kiosk grid.
+    void triggerExitFromMenu();
+
+    // Reports whether the dropdown menu is currently in its open state.
+    // Used by the input layer to know whether a tap outside the menu
+    // should collapse it.
+    bool isExitMenuOpen() const { return m_ExitMenuOpen; }
+
+    // Collapses the dropdown menu back to just the circle handle.
+    void closeExitMenu();
 
 signals:
     void stageStarting(QString stage);
@@ -294,6 +310,7 @@ private:
     Uint32 m_DropAudioEndTime;
 
     Overlay::OverlayManager m_OverlayManager;
+    bool m_ExitMenuOpen = false;
 
     static CONNECTION_LISTENER_CALLBACKS k_ConnCallbacks;
     static Session* s_ActiveSession;
