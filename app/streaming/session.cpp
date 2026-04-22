@@ -1954,6 +1954,15 @@ void Session::exec()
     // We always want a resizable window with High DPI enabled
     Uint32 defaultWindowFlags = SDL_WINDOW_ALLOW_HIGHDPI | SDL_WINDOW_RESIZABLE;
 
+    // If we're going fullscreen, apply the flag at creation time so the
+    // SDL window never flashes in windowed mode before
+    // SDL_SetWindowFullscreen is called further below. This matters on
+    // kiosk deployments where any brief windowed flash is visible to
+    // visitors.
+    if (m_IsFullScreen) {
+        defaultWindowFlags |= m_FullScreenFlag;
+    }
+
     // If we're starting in windowed mode and the Moonlight GUI is maximized or
     // minimized, match that with the streaming window.
     if (!m_IsFullScreen && m_QtWindow != nullptr) {
