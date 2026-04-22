@@ -16,6 +16,24 @@ HydraExperienceNet kiosk <HOST> --district <DISTRICT> --venue <VENUE>
 
 The host must already be paired (hydraheadflatscreen handles pairing automatically).
 
+## Headless pair subcommand (Phase 1 of window consolidation)
+
+As of v6.1.22 the `pair` subcommand accepts `--headless`. In headless
+mode the QML engine is never loaded: the Launcher runs on the core
+event loop, exits 0 on success or 1 on failure, and writes any
+detail to stderr. hydraheadflatscreen v2.0.29+ passes `--headless`
+before every stream launch so the pair step no longer flashes a Qt
+window on the kiosk display.
+
+Older HydraExperienceNet binaries ignore unknown flags, so the agent
+can pass `--headless` unconditionally without a version-gated path.
+
+Phase 2 — hosting the stream inside the kiosk process and removing
+the stream subprocess entirely — is tracked on
+issues.experiencenet.com **#111**. Until then, each tile-tap still
+produces exactly one stream-subprocess window transition (the kiosk
+hide + stream show); the pair-subprocess window transition is gone.
+
 ## Kiosk loading screen (tile tap to first frame)
 
 The stream subprocess reuses the kiosk's fullscreen chrome during the
