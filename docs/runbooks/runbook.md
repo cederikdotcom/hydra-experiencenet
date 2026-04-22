@@ -248,13 +248,21 @@ In kiosk mode, the app starts a local HTTP server on `127.0.0.1:9741` with view-
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/v1/screenshot` | Captures the screen via macOS `screencapture` command (SkyLight), returns JPEG |
+| `GET /api/v1/probe?host=IP&port=PORT` | TCP reachability probe routed through the app's Local Network TCC |
+| `POST /api/v1/window/hide` | Hide the kiosk window (stream takes over display) |
+| `POST /api/v1/window/show` | Show the kiosk window (stream ended) — enters fullscreen for non-Tool windows |
 
-The hydraheadflatscreen Go service on `:9740` proxies screenshot requests to this server. This architecture keeps permission-sensitive operations (screen recording) in the `.app` bundle where macOS TCC can properly prompt the user.
+**Screenshots are not part of this API.** v6.1.24 removed `/api/v1/screenshot`
+and the `Screen Recording` TCC request from the kiosk startup path — the
+endpoint was being hit by hydracluster dashboard polling and re-triggered a
+macOS permission prompt on every kiosk launch. Ops take kiosk screenshots
+externally through Terminal's own Screen Recording TCC grant
+(`osascript → tell Terminal to do script → /usr/sbin/screencapture`).
 
 ## macOS Permissions
 
-On first kiosk launch, the app triggers the macOS Screen Recording permission prompt. The user must click **Allow** in the system dialog. This only needs to happen once.
+The kiosk app requests **Local Network** (for body probes) on first launch.
+Screen Recording is no longer requested (see Local View API section above).
 
 The app also prevents display sleep via `IOPMAssertion` while in kiosk mode, replacing the `caffeinate` approach used by the Go service.
 
