@@ -34,15 +34,20 @@ with a single "Exit experience" item. Behaviour:
 - **Reveal strip** (legacy, kept harmless): a tap in the top 60 px
   re-asserts the handle's visibility.
 
-The hit regions are deliberately larger than the rendered glyph / text
-so near-misses still land, and they do NOT overlap: the handle occupies
-the top-right 160 x 80 px and the menu item occupies the next 320 x 80
-px strip just below (y=80-160). The menu is rendered as text on a
-translucent dark pill (24 x 12 px padding) so it reads as a clickable
-element against any stream content; the handle is plain white text on
-purpose to keep its subtle indicator feel. A future iteration will
-replace the circle glyph with a Hydra SVG logo; the hit-region sizing
-stays the same.
+The hit regions are tuned to match where the overlays actually land on
+screen rather than where drawable-pixel offsets naively suggest: on a
+retina mac mini the Metal drawable is 2x the SDL window points, so a
+80 drawable-pixel offset appears at roughly window y=40. Current layout
+(all in SDL window coords):
+
+- Handle: top-right **220 x 40 px** (y=0-40).
+- Menu: top-right **360 x 70 px** directly below the handle (y=40-110).
+
+The menu surface is rendered as text on a translucent dark pill (24 x 12
+px padding) so it reads as a clickable element against any stream
+content; the handle is plain white text on purpose to keep its subtle
+indicator feel. A future iteration will replace the circle glyph with a
+Hydra SVG logo; the hit-region sizing stays the same.
 
 **Required agent flag:** kiosks must run hydraheadflatscreen v2.0.26+
 which passes `--absolute-mouse` to the Moonlight stream subcommand.
