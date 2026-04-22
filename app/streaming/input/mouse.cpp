@@ -13,15 +13,19 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 {
     int button;
 
-    if (event->which == SDL_TOUCH_MOUSEID) {
-        // Ignore synthetic mouse events
-        return;
-    }
+    // Log every button event so we can tell from the Moonlight log whether
+    // the Mac mini mouse / trackpad is delivering real events or synthetic
+    // touch events (SDL_TOUCH_MOUSEID). Needed because the exit-overlay tap
+    // was silently failing when clicks came through as touch-synth events.
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "exit-overlay: mouse button event btn=%d state=%d which=%u pt=(%d,%d)",
+                event->button, event->state, event->which,
+                event->x, event->y);
 
-    // If the visitor taps the exit overlay, consume the event and trigger a
-    // clean disconnect back to the kiosk grid. Must run before the capture
-    // logic below so a tap on the pill doesn't get forwarded to the host as
-    // a click.
+    // Exit-overlay tap handling runs BEFORE the SDL_TOUCH_MOUSEID filter so
+    // trackpad taps (which often come through as synthetic mouse events on
+    // macOS) still trigger the clean disconnect. The host doesn't see these
+    // clicks either way because we return after handling them.
     if (event->button == SDL_BUTTON_LEFT && event->state == SDL_PRESSED) {
         Session* session = Session::get();
         if (session != nullptr && session->isPointInExitOverlay(event->x, event->y)) {
@@ -29,14 +33,20 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
             return;
         }
 
-        // If the overlay is hidden but the tap lands in the top reveal
-        // strip, summon it back instead of forwarding to the host. Keeps
-        // the kiosk exit gesture discoverable even after the 3-second
-        // auto-hide.
+        // Even if the overlay is currently hidden, a tap in the top reveal
+        // strip summons it rather than being forwarded to the host. Keeps
+        // the exit gesture discoverable on pure-touch kiosks.
         if (session != nullptr && event->y <= EXIT_OVERLAY_REVEAL_HEIGHT) {
             session->showExitOverlay();
             return;
         }
+    }
+
+    if (event->which == SDL_TOUCH_MOUSEID) {
+        // Ignore synthetic mouse events for the rest of the handler. We
+        // specifically let them through the exit-overlay check above because
+        // that is the one place we actually want touch taps.
+        return;
     }
 
     if (!isCaptureActive()) {

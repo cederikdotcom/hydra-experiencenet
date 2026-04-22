@@ -1738,6 +1738,8 @@ void Session::setShouldExit(bool quitHostApp)
 
 void Session::showExitOverlay()
 {
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "exit-overlay: showExitOverlay called");
+
     // Centered pill that tells the visitor how to leave the stream. Text
     // is intentionally plain ASCII because the bundled ModeSeven.ttf does
     // not carry rich glyphs. Stays visible for the whole stream so the

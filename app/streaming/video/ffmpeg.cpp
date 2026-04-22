@@ -743,6 +743,12 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
         // Tell overlay manager to use this frontend renderer
         Session::get()->getOverlayManager().setOverlayRenderer(m_FrontendRenderer);
 
+        // Kick the kiosk exit overlay on as soon as the renderer is ready.
+        // Calling this here instead of only after connectionStarted() side-
+        // steps a timing window where notifyOverlayUpdated fired before the
+        // Metal texture pipeline had a renderer registered.
+        Session::get()->showExitOverlay();
+
         // Allow the renderer to perform final preparations for rendering
         m_FrontendRenderer->prepareToRender();
 
