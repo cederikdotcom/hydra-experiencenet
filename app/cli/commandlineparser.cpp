@@ -263,6 +263,9 @@ void PairCommandLineParser::parse(const QStringList &args)
     parser.addPositionalArgument("pair", "pair host");
     parser.addPositionalArgument("host", "Host computer name, UUID, or IP address", "<host>");
     parser.addValueOption("pin", "4 digit pairing PIN");
+    parser.addToggleOption("headless",
+                           "run pairing without opening a GUI window; "
+                           "status is communicated via exit code and stderr only");
 
     if (!parser.parse(args)) {
         parser.showError(parser.errorText());
@@ -284,6 +287,12 @@ void PairCommandLineParser::parse(const QStringList &args)
     if (!m_PredefinedPin.isEmpty() && m_PredefinedPin.length() != 4) {
         parser.showError("PIN must be 4 digits");
     }
+    m_Headless = parser.getToggleOptionValue("headless", false);
+}
+
+bool PairCommandLineParser::isHeadless() const
+{
+    return m_Headless;
 }
 
 QString PairCommandLineParser::getHost() const

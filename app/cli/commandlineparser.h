@@ -48,10 +48,12 @@ public:
 
     QString getHost() const;
     QString getPredefinedPin() const;
+    bool isHeadless() const;
 
 private:
     QString m_Host;
     QString m_PredefinedPin;
+    bool m_Headless = false;
 };
 
 class StreamCommandLineParser

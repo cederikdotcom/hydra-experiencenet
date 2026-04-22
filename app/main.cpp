@@ -976,10 +976,34 @@ int main(int argc, char *argv[])
         }
     case GlobalCommandLineParser::PairRequested:
         {
-            initialView = "qrc:/gui/CliPair.qml";
             PairCommandLineParser pairParser;
             pairParser.parse(app.arguments());
             auto launcher = new CliPair::Launcher(pairParser.getHost(), pairParser.getPredefinedPin(), &app);
+
+            if (pairParser.isHeadless()) {
+                // Headless mode: no GUI window at all, exit code signals
+                // result. Used by hydraheadflatscreen which invokes the
+                // pair subcommand before every stream launch — spawning
+                // a Qt window for that was causing a visible flash on
+                // the kiosk display.
+                QObject::connect(launcher, &CliPair::Launcher::success, &app, []() {
+                    fprintf(stderr, "pair: success\n");
+                    QCoreApplication::exit(0);
+                });
+                QObject::connect(launcher, &CliPair::Launcher::failed, &app, [](const QString& msg) {
+                    fprintf(stderr, "pair: failed: %s\n", msg.toUtf8().constData());
+                    QCoreApplication::exit(1);
+                });
+                QObject::connect(launcher, &CliPair::Launcher::pairing, &app, [](const QString& pc, const QString& pin) {
+                    fprintf(stderr, "pair: pairing with %s using PIN %s\n",
+                            pc.toUtf8().constData(), pin.toUtf8().constData());
+                });
+                launcher->execute(new ComputerManager(StreamingPreferences::get()));
+                hasGUI = false;
+                break;
+            }
+
+            initialView = "qrc:/gui/CliPair.qml";
             engine.rootContext()->setContextProperty("launcher", launcher);
             break;
         }
