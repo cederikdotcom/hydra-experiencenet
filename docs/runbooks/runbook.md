@@ -147,9 +147,17 @@ cleanup once the QML overlay is proven out. Behaviour:
   the screen. Present throughout the stream and on the kiosk grid so
   the exit gesture is discoverable.
 - **Tap / click the handle:** toggles the dropdown. No disconnect yet.
-- **Tap / click "Exit experience":** triggers a clean disconnect. The
-  existing `quitStarting` → `sessionFinished` path returns the visitor
-  to the kiosk grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
+- **Tap / click "Exit experience":** triggers a clean disconnect. As of
+  v6.1.25 the overlay also briefly expands to fullscreen with a black
+  "Quitting experience" veil during the disconnect to cover the macOS
+  desktop flash that was visible between the stream subprocess's
+  fullscreen Space collapsing and the kiosk's Space coming forward.
+  A one-shot 1.5-second `Timer` in `StreamOverlay.qml` collapses the
+  veil back regardless of what the streaming pipeline does, so a
+  hang on the stream side cannot leave the visitor stuck behind an
+  opaque black screen. The existing `quitStarting` →
+  `sessionFinished` path continues to return the visitor to the kiosk
+  grid (same flow as the Ctrl+Alt+Shift+Q keyboard shortcut).
 - **Tap anywhere else while the menu is open:** collapses the dropdown
   back to just the circle handle.
 - **Reveal strip** (legacy, kept harmless): a tap in the top 60 px
