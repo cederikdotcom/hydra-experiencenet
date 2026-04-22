@@ -38,8 +38,20 @@ Item {
         stageLabel.visible = false
         hintText.visible = false
 
-        // Hide the window now that streaming has begun
+        // Hide the main window now that streaming has begun
         window.visible = false
+
+        // Raise the floating kiosk exit overlay. It's a separate
+        // always-on-top frameless window that sits over the SDL stream
+        // window and contains the subtle handle + "Exit experience"
+        // menu. Created lazily so we don't pay for it in non-kiosk runs.
+        if (streamOverlayLoader.item === null) {
+            streamOverlayLoader.active = true
+        }
+        if (streamOverlayLoader.item !== null) {
+            streamOverlayLoader.item.session = session
+            streamOverlayLoader.item.visible = true
+        }
     }
 
     function displayLaunchError(text)
@@ -57,6 +69,12 @@ Item {
 
         // Show the Qt window again to show quit segue
         window.visible = true
+
+        // Drop the floating exit overlay as soon as we start teardown
+        // so it doesn't briefly appear on top of the quit segue.
+        if (streamOverlayLoader.item !== null) {
+            streamOverlayLoader.item.visible = false
+        }
     }
 
     function sessionFinished(portTestResult)
@@ -98,6 +116,21 @@ Item {
         // and keeps other libraries (like SDL_TTF) around until it is deleted.
         session = null
         gc()
+
+        // Tear the overlay window down so it isn't holding a reference to
+        // the now-deleted Session and doesn't linger on the next stream.
+        if (streamOverlayLoader.item !== null) {
+            streamOverlayLoader.item.session = null
+            streamOverlayLoader.item.visible = false
+        }
+        streamOverlayLoader.active = false
+    }
+
+    // Lazily loads StreamOverlay.qml once we actually start a stream.
+    Loader {
+        id: streamOverlayLoader
+        active: false
+        source: "qrc:/gui/StreamOverlay.qml"
     }
 
     StackView.onDeactivating: {

@@ -1745,13 +1745,14 @@ void Session::showExitOverlay()
     // throughout the stream so the exit gesture is always discoverable.
     // Placeholder glyph for now; a Hydra SVG logo would replace this in a
     // later iteration.
+    //
+    // This method is intentionally conservative: it ONLY asserts the
+    // handle's visibility. It does NOT touch m_ExitMenuOpen or the menu
+    // overlay state, because mouse motion near the top edge invokes this
+    // as a reveal, and we must not stomp the dropdown while a visitor is
+    // traveling toward the menu item to click it.
     m_OverlayManager.updateOverlayText(Overlay::OverlayExitButton, "\xE2\x97\x8F");
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, true);
-
-    // Start in the collapsed state so the menu body is hidden until the
-    // visitor intentionally opens it by tapping the handle.
-    m_ExitMenuOpen = false;
-    m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
 }
 
 bool Session::isPointInExitOverlay(int windowX, int windowY)
@@ -1863,6 +1864,14 @@ void Session::triggerExitFromMenu()
     // existing quitStarting / sessionFinished signals return the visitor
     // to the kiosk grid without forcing the host app to quit.
     setShouldExit(false);
+
+    // Nudge the event loop awake so the disconnect happens immediately,
+    // mirroring what the keyboard quit combo does. Without this the
+    // stream keeps running until the loop next samples m_ShouldExit.
+    SDL_Event quitEvent = {};
+    quitEvent.type = SDL_QUIT;
+    quitEvent.quit.timestamp = SDL_GetTicks();
+    SDL_PushEvent(&quitEvent);
 }
 
 void Session::closeExitMenu()

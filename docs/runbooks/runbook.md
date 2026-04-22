@@ -18,9 +18,20 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Exit-to-menu overlay (stream view)
 
-During an active stream, a subtle circle handle is visible at the
-top-right of the stream window. Tapping it opens a small dropdown menu
-with a single "Exit experience" item. Behaviour:
+During an active stream, a subtle handle is visible at the top-right of
+the screen. Tapping it opens a small dropdown menu with a single
+"Exit experience" item.
+
+**Implementation:** as of v6.1.10 the handle + dropdown are implemented
+as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
+loaded by `StreamSegue.qml` when the stream connection starts. Qt Quick
+handles hit testing, hover, and click routing natively — no SDL drawable
+coordinate math, no interaction with the Moonlight mouse capture mode.
+The window is destroyed on `sessionReadyForDeletion` so it does not hold
+a Session reference beyond its lifetime. The older SDL/Metal overlay
+(`OverlayExitButton` / `OverlayExitMenu` in `overlaymanager.h`) is still
+present during a transition period and will be removed in a later
+cleanup once the QML overlay is proven out. Behaviour:
 
 - **Handle (always visible):** a circle glyph at the top-right. Small
   enough to stay out of the way of whatever is on-screen, but present

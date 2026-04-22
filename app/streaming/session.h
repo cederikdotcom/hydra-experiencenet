@@ -144,8 +144,9 @@ public:
 
     // Triggered when the visitor taps the "Exit experience" item in the
     // expanded menu. Hides overlays and asks the session to disconnect
-    // cleanly so StreamSegue returns to the kiosk grid.
-    void triggerExitFromMenu();
+    // cleanly so StreamSegue returns to the kiosk grid. Exposed to QML
+    // so StreamOverlay.qml can invoke it directly on click.
+    Q_INVOKABLE void triggerExitFromMenu();
 
     // Reports whether the dropdown menu is currently in its open state.
     // Used by the input layer to know whether a tap outside the menu
