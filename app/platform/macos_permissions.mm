@@ -15,17 +15,31 @@
 
 void enableKioskPresentation()
 {
-    // Auto-hide the menu bar and dock while the app is frontmost.
-    // NSApplicationPresentationFullScreen is deliberately NOT set so
-    // we stay on the user's regular Space — a floating Qt overlay
-    // window does not follow into a macOS fullscreen Space.
+    // Fully hide the menu bar and dock, not auto-hide. We stay off of
+    // NSApplicationPresentationFullScreen on purpose — the floating Qt
+    // exit overlay cannot follow into a macOS fullscreen Space.
+    //
+    // Re-apply whenever the app becomes active, because macOS can reset
+    // presentation options when the frontmost app changes (e.g. a
+    // screencapture run briefly activates Terminal).
     dispatch_async(dispatch_get_main_queue(), ^{
         NSApplicationPresentationOptions options =
-            NSApplicationPresentationAutoHideMenuBar |
-            NSApplicationPresentationAutoHideDock;
+            NSApplicationPresentationHideMenuBar |
+            NSApplicationPresentationHideDock;
         [NSApp setPresentationOptions:options];
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
-                    "kiosk presentation options set: auto-hide menu bar + dock");
+                    "kiosk presentation options set: hide menu bar + dock");
+
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:NSApplicationDidBecomeActiveNotification
+                        object:nil
+                         queue:[NSOperationQueue mainQueue]
+                    usingBlock:^(NSNotification *note) {
+            NSApplicationPresentationOptions opts =
+                NSApplicationPresentationHideMenuBar |
+                NSApplicationPresentationHideDock;
+            [NSApp setPresentationOptions:opts];
+        }];
     });
 }
 

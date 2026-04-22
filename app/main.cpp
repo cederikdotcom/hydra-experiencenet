@@ -988,6 +988,7 @@ int main(int argc, char *argv[])
             kioskParser.parse(app.arguments(), preferences);
             engine.rootContext()->setContextProperty("kioskDistrict", kioskParser.getDistrict());
             engine.rootContext()->setContextProperty("kioskVenue", kioskParser.getVenue());
+            engine.rootContext()->setContextProperty("kioskMode", true);
 
 #ifdef Q_OS_MACOS
             // Request all macOS TCC permissions on first kiosk launch.
@@ -1017,6 +1018,12 @@ int main(int argc, char *argv[])
     if (hasGUI) {
         engine.rootContext()->setContextProperty("initialView", initialView);
         engine.rootContext()->setContextProperty("runConfigChecks", commandLineParserResult == GlobalCommandLineParser::NormalStartRequested);
+        // Default kioskMode to false so non-kiosk windows don't see an
+        // undefined context property. The kiosk branch overrides this
+        // above before main.qml is loaded.
+        if (!engine.rootContext()->contextProperty("kioskMode").isValid()) {
+            engine.rootContext()->setContextProperty("kioskMode", false);
+        }
 
         // Load the main.qml file
         engine.load(QUrl(QStringLiteral("qrc:/gui/main.qml")));

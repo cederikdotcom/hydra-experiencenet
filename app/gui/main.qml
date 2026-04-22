@@ -22,6 +22,14 @@ ApplicationWindow {
     width: 1280
     height: 600
 
+    // When launched as a kiosk we drop the macOS window chrome
+    // (title bar, traffic lights). Must be set at declaration
+    // time: changing flags after the window is already visible
+    // doesn't recreate the underlying NSWindow on macOS.
+    flags: (typeof kioskMode !== "undefined" && kioskMode)
+           ? (Qt.Window | Qt.FramelessWindowHint)
+           : Qt.Window
+
     // This function runs prior to creation of the initial StackView item
     function doEarlyInit() {
         // Override the background color to Material 2 colors for Qt 6.5+

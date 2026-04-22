@@ -90,10 +90,17 @@ Window {
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 exitDropdown.visible = false
-                streamOverlayWindow.visible = false
                 if (streamOverlayWindow.session !== null) {
+                    // Real exit path: hide the whole overlay and ask
+                    // the session to disconnect so StreamSegue can take
+                    // us back to the kiosk grid.
+                    streamOverlayWindow.visible = false
                     streamOverlayWindow.session.triggerExitFromMenu()
                 }
+                // If session is null (kiosk grid context), there's
+                // nothing to exit from — just collapse the dropdown
+                // and keep the handle visible so the menu can be
+                // re-opened.
             }
         }
     }

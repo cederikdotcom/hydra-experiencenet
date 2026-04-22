@@ -28,7 +28,8 @@ Item {
         // lights by setting FramelessWindowHint so the end result is
         // edge-to-edge kiosk chrome without losing the overlay.
         if (typeof window !== "undefined" && window !== null) {
-            window.flags = Qt.Window | Qt.FramelessWindowHint
+            // flags are now set at the ApplicationWindow declaration
+            // via the kioskMode context property, not here.
             window.showMaximized()
         }
 
