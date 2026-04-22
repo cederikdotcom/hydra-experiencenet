@@ -2,6 +2,7 @@ import QtQuick 2.9
 import QtQuick.Controls 2.2
 import QtQuick.Controls.Material 2.2
 import QtQuick.Layouts 1.3
+import QtQuick.Window 2.2
 
 Item {
     id: kioskRoot
@@ -28,9 +29,20 @@ Item {
         // lights by setting FramelessWindowHint so the end result is
         // edge-to-edge kiosk chrome without losing the overlay.
         if (typeof window !== "undefined" && window !== null) {
-            // flags are now set at the ApplicationWindow declaration
-            // via the kioskMode context property, not here.
-            window.showMaximized()
+            // flags are set at the ApplicationWindow declaration via
+            // the kioskMode context property, not here.
+            //
+            // Size to the FULL screen bounds rather than calling
+            // showMaximized(): the presentation options hide the menu
+            // bar and dock, but the work area that showMaximized() uses
+            // is still calculated against the original non-hidden
+            // geometry, leaving a strip of wallpaper around the kiosk.
+            // Setting x/y/width/height explicitly takes all of it.
+            window.x = 0
+            window.y = 0
+            window.width = Screen.width
+            window.height = Screen.height
+            window.show()
         }
 
         // Bring up the floating exit overlay so the handle and dropdown
