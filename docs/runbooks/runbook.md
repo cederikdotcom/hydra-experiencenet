@@ -70,6 +70,31 @@ For DMG distribution:
 ./scripts/generate-dmg.sh Release
 ```
 
+## Downloading a released DMG
+
+The release server's URL scheme for this project is **version-prefixed** on
+both the path segment and the filename. The raw version (e.g. the one in
+`latest.json`) does NOT work directly — you must wrap it with `v`.
+
+```bash
+# From latest.json, pick up the version:
+curl -s https://releases.experiencenet.com/hydraexperiencenet/production/latest.json
+# {"version":"6.1.5"}
+
+# Correct download URL (note the leading v AND the version suffix in the filename):
+curl -L -fsS \
+  https://releases.experiencenet.com/hydraexperiencenet/production/v6.1.5/HydraExperienceNet-v6.1.5.dmg \
+  -o HydraExperienceNet.dmg
+```
+
+Wrong URLs that will 404 via the mirror:
+- `...production/6.1.5/HydraExperienceNet.dmg` (no v, no version suffix)
+- `...production/v6.1.5/HydraExperienceNet.dmg` (no version suffix)
+- `...production/6.1.5/HydraExperienceNet-v6.1.5.dmg` (no v)
+
+If the release server's mirror path ever 404s, the GitHub release asset URL is
+a reliable fallback — `https://github.com/cederikdotcom/hydra-experiencenet/releases/download/v<X.Y.Z>/HydraExperienceNet-v<X.Y.Z>.dmg`.
+
 ## Local View API (kiosk mode)
 
 In kiosk mode, the app starts a local HTTP server on `127.0.0.1:9741` with view-layer endpoints:
