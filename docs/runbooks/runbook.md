@@ -54,6 +54,15 @@ Pieces involved:
    though showFullScreen already hides the menu bar and dock — the
    presentation options keep things hidden if the app ever leaves
    fullscreen without our intent.
+5. **Re-entering fullscreen on window show.** When a stream starts,
+   hydraheadflatscreen calls `/api/v1/window/hide` and the Qt app
+   hides every top-level window. On a macOS window that is already
+   in a fullscreen Space, `hide()` can drop it out of the Space, so
+   a later `show()` brings it back as a plain windowed app centred
+   on the desktop with wallpaper visible around it. `handleWindowShow`
+   in `app/api/localserver.cpp` therefore calls `showFullScreen()`
+   (not plain `show()`) on non-`Qt.Tool` top-level windows so the
+   kiosk returns to fullscreen each time. v6.1.20.
 
 History of the approach: v6.1.11 `showFullScreen` (overlay stranded);
 v6.1.12 `showMaximized` (overlay stays, but chrome visible); v6.1.15
