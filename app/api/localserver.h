@@ -7,7 +7,6 @@
 // endpoints for the hydraheadflatscreen Go service to proxy.
 //
 // Endpoints:
-//   GET /api/v1/screenshot - captures the screen and returns JPEG
 //   GET /api/v1/probe?host=IP&port=PORT - TCP connectivity check (routes through app's TCC)
 //   POST /api/v1/window/hide - hide the kiosk window (stream takes over display)
 //   POST /api/v1/window/show - show the kiosk window (stream ended)
@@ -26,7 +25,6 @@ private slots:
 
 private:
     void handleRequest(QTcpSocket* socket, const QByteArray& request);
-    void handleScreenshot(QTcpSocket* socket);
     void handleProbe(QTcpSocket* socket, const QByteArray& path);
     void handleWindowHide(QTcpSocket* socket);
     void handleWindowShow(QTcpSocket* socket);

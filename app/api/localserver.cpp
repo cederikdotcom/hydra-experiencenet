@@ -75,9 +75,7 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
     QByteArray method = parts[0];
     QByteArray path = parts[1];
 
-    if (method == "GET" && path == "/api/v1/screenshot") {
-        handleScreenshot(socket);
-    } else if (method == "GET" && path.startsWith("/api/v1/probe?")) {
+    if (method == "GET" && path.startsWith("/api/v1/probe?")) {
         handleProbe(socket, path);
     } else if (method == "POST" && path == "/api/v1/window/hide") {
         handleWindowHide(socket);
@@ -88,36 +86,10 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
     }
 }
 
-void LocalServer::handleScreenshot(QTcpSocket* socket)
-{
-#ifdef Q_OS_MACOS
-    // Use macOS screencapture command which uses the private SkyLight
-    // framework to capture across all Spaces and SDL Metal layers.
-    // ScreenCaptureKit/CGDisplayCreateImage cannot see SDL Metal content
-    // from the stream process, but screencapture can.
-    QString path = "/tmp/hydra-screenshot.jpg";
-    QProcess process;
-    process.start("screencapture", QStringList() << "-x" << "-t" << "jpg" << path);
-    if (!process.waitForFinished(5000) || process.exitCode() != 0) {
-        sendError(socket, 500, "screencapture failed");
-        return;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        sendError(socket, 500, "Failed to read screenshot file");
-        return;
-    }
-
-    QByteArray jpegData = file.readAll();
-    file.close();
-    QFile::remove(path);
-
-    sendResponse(socket, 200, "image/jpeg", jpegData);
-#else
-    sendError(socket, 501, "Screenshots only supported on macOS");
-#endif
-}
+// Note: the /api/v1/screenshot endpoint and its handleScreenshot()
+// helper were removed. Kiosk screenshots are now taken externally
+// through Terminal's Screen Recording TCC grant; the kiosk app itself
+// no longer needs the permission at all.
 
 void LocalServer::handleProbe(QTcpSocket* socket, const QByteArray& path)
 {
