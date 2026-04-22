@@ -28,6 +28,12 @@ void releaseDisplaySleepAssertion(uint32_t assertionId);
 // to find and connect to devices on your local network."
 void requestLocalNetworkPermission();
 
+// Engages "kiosk" presentation options so the macOS menu bar and dock
+// auto-hide while the app is frontmost. Does NOT switch into macOS
+// fullscreen Space, so the floating Qt overlay window can still sit on
+// top of the kiosk content.
+void enableKioskPresentation();
+
 // Captures the main display using ScreenCaptureKit (macOS 14+).
 // Captures everything including SDL Metal fullscreen content and across Spaces.
 // Returns a CGImageRef that the caller must release. Returns NULL on failure.

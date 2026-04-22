@@ -9,8 +9,25 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#import <AppKit/AppKit.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #include <dispatch/dispatch.h>
+
+void enableKioskPresentation()
+{
+    // Auto-hide the menu bar and dock while the app is frontmost.
+    // NSApplicationPresentationFullScreen is deliberately NOT set so
+    // we stay on the user's regular Space — a floating Qt overlay
+    // window does not follow into a macOS fullscreen Space.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSApplicationPresentationOptions options =
+            NSApplicationPresentationAutoHideMenuBar |
+            NSApplicationPresentationAutoHideDock;
+        [NSApp setPresentationOptions:options];
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "kiosk presentation options set: auto-hide menu bar + dock");
+    });
+}
 
 bool checkScreenRecordingPermission()
 {

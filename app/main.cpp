@@ -998,6 +998,12 @@ int main(int argc, char *argv[])
 
             // Prevent display sleep while kiosk is running.
             preventDisplaySleep();
+
+            // Hide menu bar and dock so the kiosk looks like a proper
+            // kiosk surface, not a windowed macOS app. Does not create
+            // a fullscreen Space so the floating Qt exit overlay can
+            // continue to sit above the kiosk content.
+            enableKioskPresentation();
 #endif
 
             // Start the local view API server for screenshot proxying.

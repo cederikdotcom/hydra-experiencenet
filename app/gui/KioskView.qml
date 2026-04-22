@@ -22,11 +22,13 @@ Item {
         // window.showFullScreen() on macOS because that creates a
         // separate macOS Space, and the floating Qt overlay window
         // that holds our ⋯ exit handle is stuck on the original
-        // Space and would disappear. Maximized keeps us on the same
-        // Space so the overlay stays visible; the macOS menu bar is
-        // still visible at the very top of the screen but the kiosk
-        // fills the rest of the display.
+        // Space and would disappear. The macOS menu bar and dock
+        // are auto-hidden by enableKioskPresentation() in main.cpp
+        // (kiosk mode), and we drop the window's title bar + traffic
+        // lights by setting FramelessWindowHint so the end result is
+        // edge-to-edge kiosk chrome without losing the overlay.
         if (typeof window !== "undefined" && window !== null) {
+            window.flags = Qt.Window | Qt.FramelessWindowHint
             window.showMaximized()
         }
 

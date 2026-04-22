@@ -18,16 +18,28 @@ The host must already be paired (hydraheadflatscreen handles pairing automatical
 
 ## Kiosk view goes fullscreen on launch
 
-As of v6.1.12 the kiosk view calls `window.showMaximized()` in
-`KioskView.qml`'s `StackView.onActivated` handler so the experience
-library fills the display without creating a separate macOS Space.
-We used `showFullScreen()` briefly in v6.1.11 but that created a
-Space that the floating Qt overlay window could not follow into, so
-the ⋯ exit handle disappeared on the kiosk view. Maximized keeps
-everything on the same Space at the cost of the macOS menu bar
-remaining visible at the very top; iterating on that (hiding menu
-bar + dock via `NSApplication -setPresentationOptions`) is a later
-polish step. The stream
+As of v6.1.15 the kiosk view:
+
+1. Sets `window.flags = Qt.Window | Qt.FramelessWindowHint` to drop
+   the macOS window title bar and traffic lights.
+2. Calls `window.showMaximized()` so the window fills the work area
+   without switching into a fullscreen Space (which would strand the
+   floating Qt exit overlay on the original Space).
+3. Relies on `enableKioskPresentation()` in
+   `app/platform/macos_permissions.mm` — called from `main.cpp` on
+   kiosk launch — to auto-hide the macOS menu bar and dock via
+   `NSApplication setPresentationOptions:
+    NSApplicationPresentationAutoHideMenuBar |
+    NSApplicationPresentationAutoHideDock`.
+
+Together this gives a visually edge-to-edge kiosk without using true
+macOS fullscreen, so the floating Qt overlay window stays above the
+kiosk content the whole time.
+
+History: v6.1.11 used `showFullScreen()` briefly; v6.1.12 moved to
+`showMaximized()` after discovering the overlay was stranded on the
+old Space; v6.1.15 added `FramelessWindowHint` and the NSApplication
+presentation options to clean up the remaining chrome. The stream
 subcommand is launched by hydraheadflatscreen v2.0.28+ with
 `--display-mode borderless`, which is Moonlight-Qt's
 WM_FULLSCREEN_DESKTOP — a frameless fullscreen window that does NOT
