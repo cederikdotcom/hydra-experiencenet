@@ -152,16 +152,47 @@ void OverlayManager::notifyOverlayUpdated(OverlayType type)
         }
     }
 
-    // Exchange the old surface with the new one
+    // Render the text into a surface. The _Wrapped variant is required for
+    // line breaks to work.
+    SDL_Surface* newSurface = nullptr;
+    if (m_Overlays[type].enabled) {
+        SDL_Surface* textSurface = TTF_RenderText_Blended_Wrapped(m_Overlays[type].font,
+                                                                  m_Overlays[type].text,
+                                                                  m_Overlays[type].color,
+                                                                  1024);
+        if (textSurface != nullptr && type == OverlayType::OverlayExitMenu) {
+            // Wrap the menu text in a translucent dark rectangle so it
+            // reads as a clickable pill against any stream content. The
+            // handle overlay stays plain text on purpose — it's meant to
+            // feel like a subtle indicator, not a button.
+            const int padX = 24;
+            const int padY = 12;
+            SDL_Surface* bgSurface = SDL_CreateRGBSurface(0,
+                                                          textSurface->w + 2 * padX,
+                                                          textSurface->h + 2 * padY,
+                                                          32,
+                                                          0x00FF0000,
+                                                          0x0000FF00,
+                                                          0x000000FF,
+                                                          0xFF000000);
+            if (bgSurface != nullptr) {
+                SDL_FillRect(bgSurface, nullptr,
+                             SDL_MapRGBA(bgSurface->format, 0x00, 0x00, 0x00, 0xCC));
+                SDL_SetSurfaceBlendMode(textSurface, SDL_BLENDMODE_BLEND);
+                SDL_Rect dst = {padX, padY, textSurface->w, textSurface->h};
+                SDL_BlitSurface(textSurface, nullptr, bgSurface, &dst);
+                SDL_FreeSurface(textSurface);
+                newSurface = bgSurface;
+            } else {
+                newSurface = textSurface;
+            }
+        } else {
+            newSurface = textSurface;
+        }
+    }
+
     SDL_Surface* oldSurface = (SDL_Surface*)SDL_AtomicSetPtr(
-        (void**)&m_Overlays[type].surface,
-        m_Overlays[type].enabled ?
-            // The _Wrapped variant is required for line breaks to work
-            TTF_RenderText_Blended_Wrapped(m_Overlays[type].font,
-                                           m_Overlays[type].text,
-                                           m_Overlays[type].color,
-                                           1024)
-            : nullptr);
+        (void**)&m_Overlays[type].surface, newSurface);
 
     // Notify the renderer
     m_Renderer->notifyOverlayUpdated(type);

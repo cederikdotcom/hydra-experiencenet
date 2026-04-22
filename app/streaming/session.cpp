@@ -1771,8 +1771,13 @@ bool Session::isPointInExitOverlay(int windowX, int windowY)
         return false;
     }
 
+    // Keep the handle hit region narrow enough that clicks on the
+    // expanded menu (rendered below it) do not also fall inside the
+    // handle's rectangle. If they did, tapping the menu item would
+    // be interpreted as a second handle tap and toggle the menu shut
+    // instead of triggering the exit.
     const int handleWidth = 160;
-    const int handleHeight = 120;
+    const int handleHeight = 80;
     const int handleLeft = windowWidth - handleWidth;
     const int handleRight = windowWidth;
     const int handleTop = 0;
@@ -1825,11 +1830,14 @@ bool Session::isPointInExitMenu(int windowX, int windowY)
         return false;
     }
 
+    // Menu pill sits just below the handle (handle hit region ends at
+    // y=80). The 320x80 rectangle is a bit wider and taller than what
+    // the renderer actually paints so near-misses still register.
     const int menuWidth = 320;
-    const int menuHeight = 60;
+    const int menuHeight = 80;
     const int menuLeft = windowWidth - menuWidth;
     const int menuRight = windowWidth;
-    const int menuTop = 120;
+    const int menuTop = 80;
     const int menuBottom = menuTop + menuHeight;
 
     bool hit = windowX >= menuLeft && windowX <= menuRight &&
