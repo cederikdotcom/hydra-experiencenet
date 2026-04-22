@@ -1,15 +1,19 @@
 import QtQuick 2.0
 import QtQuick.Controls 2.2
+import QtQuick.Controls.Material 2.2
+import QtQuick.Window 2.2
 
 import ComputerManager 1.0
 
 Item {
+    id: cliStartRoot
+
     function onSearchingComputer() {
-        stageLabel.text = qsTr("Establishing connection to PC...")
+        stageLabel.text = qsTr("Connecting")
     }
 
     function onSearchingApp() {
-        stageLabel.text = qsTr("Loading app list...")
+        stageLabel.text = qsTr("Loading experience")
     }
 
     function onSessionCreated(appName, session) {
@@ -37,6 +41,14 @@ Item {
         if (!launcher.isExecuted()) {
             toolBar.visible = false
 
+            // Fill the display with a dark loading screen while we
+            // reach out to Sunshine and bring up the decoder. Matches
+            // the kiosk's fullscreen chrome so there's no small grey
+            // window flash between tile-tap and first frame.
+            if (typeof window !== "undefined" && window !== null) {
+                window.showFullScreen()
+            }
+
             launcher.searchingComputer.connect(onSearchingComputer)
             launcher.searchingApp.connect(onSearchingApp)
             launcher.sessionCreated.connect(onSessionCreated)
@@ -46,21 +58,32 @@ Item {
         }
     }
 
-    Row {
+    // Full-bleed dark backdrop so we never show the default grey Qt
+    // window fill between kiosk-tap and the first video frame.
+    Rectangle {
+        anchors.fill: parent
+        color: "#0a0a0a"
+    }
+
+    Column {
         anchors.centerIn: parent
-        spacing: 5
+        spacing: 20
 
         BusyIndicator {
             id: stageSpinner
+            anchors.horizontalCenter: parent.horizontalCenter
             running: visible
+            Material.accent: "#6366f1"
         }
 
         Label {
             id: stageLabel
-            height: stageSpinner.height
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: qsTr("Loading experience")
             font.pointSize: 20
-            verticalAlignment: Text.AlignVCenter
-
+            font.weight: Font.Medium
+            color: "#ffffff"
+            horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
         }
     }

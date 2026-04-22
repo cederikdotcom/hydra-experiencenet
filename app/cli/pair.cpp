@@ -76,9 +76,15 @@ public:
         case Event::ComputerFound:
             if (m_State == StateSeekComputer) {
                 if (event.computer->pairState == NvComputer::PS_PAIRED) {
-                    m_State = StateFailure;
-                    QString msg = QObject::tr("%1 is already paired").arg(event.computer->name);
-                    emit q->failed(msg);
+                    // The kiosk agent re-runs the pair subcommand before
+                    // every stream launch to refresh credentials. If the
+                    // body is already paired that is the desired state,
+                    // not an error — exit the launcher cleanly so the
+                    // Qt window never shows the "X is already paired"
+                    // dialog that the original Moonlight-Qt pair CLI
+                    // surfaced to interactive users.
+                    m_State = StateComplete;
+                    emit q->success();
                 }
                 else {
                     Q_ASSERT(!m_PredefinedPin.isEmpty());

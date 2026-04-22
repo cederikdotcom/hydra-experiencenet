@@ -957,6 +957,12 @@ int main(int argc, char *argv[])
             QString appName = streamParser.getAppName();
             auto launcher   = new CliStartStream::Launcher(host, appName, preferences, &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
+
+            // Reuse the kioskMode flag for the stream subprocess so the
+            // ApplicationWindow comes up frameless + fullscreen during
+            // the connection loading phase, matching the kiosk's chrome
+            // instead of briefly flashing a small grey window.
+            engine.rootContext()->setContextProperty("kioskMode", true);
             break;
         }
     case GlobalCommandLineParser::QuitRequested:

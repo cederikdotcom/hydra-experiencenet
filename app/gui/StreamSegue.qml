@@ -241,23 +241,38 @@ Item {
         sourceComponent: Item {}
     }
 
-    Row {
+    // Dark backdrop so the loading state looks intentional instead
+    // of showing Qt's default grey fill while the stream negotiates.
+    Rectangle {
+        anchors.fill: parent
+        color: "#0a0a0a"
+        // Keep the backdrop BEHIND everything else.
+        z: -1
+    }
+
+    Column {
         anchors.centerIn: parent
-        spacing: 5
+        spacing: 20
 
         BusyIndicator {
             id: stageSpinner
+            anchors.horizontalCenter: parent.horizontalCenter
             running: visible
             visible: false
         }
 
         Label {
             id: stageLabel
-            height: stageSpinner.height
-            text: stageText
+            anchors.horizontalCenter: parent.horizontalCenter
+            // Intentionally ignore the per-stage text Moonlight emits
+            // ("Starting control connection", etc) — it is engineer-
+            // speak that kiosk visitors should never see. Show a
+            // single friendly line throughout the connection phase.
+            text: qsTr("Loading experience")
+            color: "#ffffff"
             font.pointSize: 20
-            verticalAlignment: Text.AlignVCenter
-
+            font.weight: Font.Medium
+            horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
         }
     }
