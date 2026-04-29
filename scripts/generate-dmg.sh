@@ -18,6 +18,11 @@ INSTALLER_FOLDER=$BUILD_ROOT/installer-$BUILD_CONFIG
 
 if [ -n "$CI_VERSION" ]; then
   VERSION=$CI_VERSION
+  # Sync the source file so qmake's $$cat(version.txt) bakes the tagged
+  # version into VERSION_STR (consumed by setApplicationVersion and the
+  # kiosk header). Without this the embedded version drifts behind the
+  # tag and CFBundleShortVersionString silently disagrees with the tag.
+  printf '%s' "$CI_VERSION" > $SOURCE_ROOT/app/version.txt
 else
   VERSION=`cat $SOURCE_ROOT/app/version.txt`
 fi

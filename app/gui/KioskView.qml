@@ -192,12 +192,24 @@ Item {
             spacing: 16
 
             // Brand
-            Text {
-                text: "Hydra ExperienceNet"
-                color: "#ffffff"
-                font.pixelSize: 24
-                font.weight: Font.DemiBold
-                font.family: ""
+            Column {
+                spacing: 0
+                Layout.alignment: Qt.AlignVCenter
+
+                Text {
+                    text: "Hydra ExperienceNet"
+                    color: "#ffffff"
+                    font.pixelSize: 24
+                    font.weight: Font.DemiBold
+                    font.family: ""
+                }
+
+                Text {
+                    text: "v" + Qt.application.version
+                    color: "#52525b"
+                    font.pixelSize: 11
+                    font.family: ""
+                }
             }
 
             Item { Layout.fillWidth: true }
