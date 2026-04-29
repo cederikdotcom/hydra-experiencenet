@@ -22,7 +22,10 @@ if [ -n "$CI_VERSION" ]; then
   # version into VERSION_STR (consumed by setApplicationVersion and the
   # kiosk header). Without this the embedded version drifts behind the
   # tag and CFBundleShortVersionString silently disagrees with the tag.
-  printf '%s' "$CI_VERSION" > $SOURCE_ROOT/app/version.txt
+  # Strip the leading "v" — version.txt is the SemVer string ("6.1.27"),
+  # not the git ref ("v6.1.27"); CFBundleShortVersionString and the
+  # kiosk's "v" + Qt.application.version label both expect the bare form.
+  printf '%s' "${CI_VERSION#v}" > $SOURCE_ROOT/app/version.txt
 else
   VERSION=`cat $SOURCE_ROOT/app/version.txt`
 fi
