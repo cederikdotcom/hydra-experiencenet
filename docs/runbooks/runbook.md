@@ -123,14 +123,21 @@ not follow into it.
 
 ## Help button (kiosk header)
 
-A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two support paths:
+A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two QR codes side by side that visitors scan with their smartphone:
 
-- **Report an issue** — a button that opens `https://issues.experiencenet.com` in the default browser via `Qt.openUrlExternally()`.
-- **Urgent matter** — the on-call phone number `+32 499 27 84 20` displayed as plain text (no tap action; visitor reads and dials manually).
+- **Left QR code** — encodes `https://issues.experiencenet.com`. Scanning opens the issue tracker in the visitor's browser.
+- **Right QR code** — encodes `tel:+3249927842020`. Scanning prompts the visitor's phone to call the urgent support number. The number `+32 499 27 84 20` is also printed below the QR code as a fallback.
 
 Clicking the backdrop or the "Close" button dismisses the dialog. The dialog does not block the stream-start path — `helpVisible` is a local property of `KioskView.qml` and is unrelated to stream state.
 
-The phone number is hardcoded in `KioskView.qml`. To change it, update the `Text { text: "+32 499 27 84 20" }` node in the help dialog rectangle and tag a new release.
+The QR code images are pre-generated SVG files embedded as Qt resources (`res/qr_issue.svg` and `res/qr_phone.svg`). To change the URL or phone number, regenerate the SVGs:
+
+```bash
+npx qrcode -t svg -o app/res/qr_issue.svg "https://issues.experiencenet.com"
+npx qrcode -t svg -o app/res/qr_phone.svg "tel:+3249927842020"
+```
+
+Also update the fallback phone number text in `KioskView.qml` (`"Scan to call for urgent help\n+32 499 27 84 20"`) and tag a new release.
 
 ## Exit-to-menu overlay (stream view and kiosk view)
 

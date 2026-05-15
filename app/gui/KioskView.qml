@@ -493,7 +493,7 @@ Item {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 460
+            width: 440
             radius: 16
             color: "#18181b"
             border.color: "#27272a"
@@ -520,77 +520,68 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                 }
 
-                Column {
-                    width: parent.width
-                    spacing: 10
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 32
 
-                    Text {
-                        width: parent.width
-                        text: qsTr("Report an issue")
-                        color: "#a1a1aa"
-                        font.pixelSize: 13
-                        font.family: ""
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    // Report an issue
+                    Column {
+                        spacing: 12
 
-                    Rectangle {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: reportLinkText.implicitWidth + 32
-                        height: 40
-                        radius: 8
-                        color: reportLinkArea.containsMouse ? "#4f46e5" : "#6366f1"
+                        Rectangle {
+                            width: 160
+                            height: 160
+                            color: "#ffffff"
+                            radius: 8
 
-                        Behavior on color {
-                            ColorAnimation { duration: 150 }
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                source: "qrc:/res/qr_issue.svg"
+                                fillMode: Image.PreserveAspectFit
+                                smooth: false
+                            }
                         }
 
                         Text {
-                            id: reportLinkText
-                            anchors.centerIn: parent
-                            text: "issues.experiencenet.com"
-                            color: "#ffffff"
-                            font.pixelSize: 14
-                            font.weight: Font.Medium
+                            width: 160
+                            text: qsTr("Scan to report an issue")
+                            color: "#a1a1aa"
+                            font.pixelSize: 12
                             font.family: ""
-                        }
-
-                        MouseArea {
-                            id: reportLinkArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Qt.openUrlExternally("https://issues.experiencenet.com")
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
                         }
                     }
-                }
 
-                Rectangle {
-                    width: parent.width
-                    height: 1
-                    color: "#27272a"
-                }
+                    // Call for urgent matters
+                    Column {
+                        spacing: 12
 
-                Column {
-                    width: parent.width
-                    spacing: 8
+                        Rectangle {
+                            width: 160
+                            height: 160
+                            color: "#ffffff"
+                            radius: 8
 
-                    Text {
-                        width: parent.width
-                        text: qsTr("Urgent matter?")
-                        color: "#a1a1aa"
-                        font.pixelSize: 13
-                        font.family: ""
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                            Image {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                source: "qrc:/res/qr_phone.svg"
+                                fillMode: Image.PreserveAspectFit
+                                smooth: false
+                            }
+                        }
 
-                    Text {
-                        width: parent.width
-                        text: "+32 499 27 84 20"
-                        color: "#ffffff"
-                        font.pixelSize: 22
-                        font.weight: Font.DemiBold
-                        font.family: ""
-                        horizontalAlignment: Text.AlignHCenter
+                        Text {
+                            width: 160
+                            text: qsTr("Scan to call for urgent help\n+32 499 27 84 20")
+                            color: "#a1a1aa"
+                            font.pixelSize: 12
+                            font.family: ""
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                        }
                     }
                 }
 
