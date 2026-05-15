@@ -134,7 +134,7 @@ The QR code images are pre-generated SVG files embedded as Qt resources (`res/qr
 
 ```bash
 npx qrcode -t svg -o app/res/qr_issue.svg "https://issues.experiencenet.com/report"
-npx qrcode -t svg -o app/res/qr_phone.svg "tel:+3249927842020"
+npx qrcode -t svg -o app/res/qr_phone.svg "tel:+32499278420"
 ```
 
 Also update the fallback phone number text in `KioskView.qml` (`"Scan to call for urgent help\n+32 499 27 84 20"`) and tag a new release.

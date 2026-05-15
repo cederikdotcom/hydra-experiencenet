@@ -443,7 +443,7 @@ Item {
                     anchors.leftMargin: 16
                     anchors.rightMargin: 16
                     width: parent.width - 32
-                    text: experiences[index].name || ""
+                    text: experiences[index].label || experiences[index].name || ""
                     color: "#ffffff"
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
