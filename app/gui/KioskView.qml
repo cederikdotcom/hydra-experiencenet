@@ -522,7 +522,7 @@ Item {
 
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 32
+                    spacing: 64
 
                     // Report an issue
                     Column {
