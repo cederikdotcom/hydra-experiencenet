@@ -121,6 +121,17 @@ Do not switch the stream to `--display-mode fullscreen` (true macOS
 fullscreen): that creates a new Space and the exit overlay window does
 not follow into it.
 
+## Help button (kiosk header)
+
+A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two support paths:
+
+- **Report an issue** — a button that opens `https://issues.experiencenet.com` in the default browser via `Qt.openUrlExternally()`.
+- **Urgent matter** — the on-call phone number `+32 499 27 84 20` displayed as plain text (no tap action; visitor reads and dials manually).
+
+Clicking the backdrop or the "Close" button dismisses the dialog. The dialog does not block the stream-start path — `helpVisible` is a local property of `KioskView.qml` and is unrelated to stream state.
+
+The phone number is hardcoded in `KioskView.qml`. To change it, update the `Text { text: "+32 499 27 84 20" }` node in the help dialog rectangle and tag a new release.
+
 ## Exit-to-menu overlay (stream view and kiosk view)
 
 A subtle handle is visible at the top centre of the screen both during
