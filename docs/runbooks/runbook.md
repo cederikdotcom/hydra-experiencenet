@@ -133,7 +133,7 @@ Clicking the backdrop or the "Close" button dismisses the dialog. The dialog doe
 The QR code images are pre-generated SVG files embedded as Qt resources (`res/qr_issue.svg` and `res/qr_phone.svg`). To change the URL or phone number, regenerate the SVGs:
 
 ```bash
-npx qrcode -t svg -o app/res/qr_issue.svg "https://issues.experiencenet.com"
+npx qrcode -t svg -o app/res/qr_issue.svg "https://issues.experiencenet.com/report"
 npx qrcode -t svg -o app/res/qr_phone.svg "tel:+3249927842020"
 ```
 
