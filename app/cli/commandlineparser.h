@@ -66,10 +66,12 @@ public:
 
     QString getHost() const;
     QString getAppName() const;
+    bool getForceQuitApp() const;
 
 private:
     QString m_Host;
     QString m_AppName;
+    bool m_ForceQuitApp = false;
     QMap<QString, StreamingPreferences::WindowMode> m_WindowModeMap;
     QMap<QString, StreamingPreferences::AudioConfig> m_AudioConfigMap;
     QMap<QString, StreamingPreferences::VideoCodecConfig> m_VideoCodecMap;

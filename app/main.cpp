@@ -955,7 +955,7 @@ int main(int argc, char *argv[])
             streamParser.parse(app.arguments(), preferences);
             QString host    = streamParser.getHost();
             QString appName = streamParser.getAppName();
-            auto launcher   = new CliStartStream::Launcher(host, appName, preferences, &app);
+            auto launcher   = new CliStartStream::Launcher(host, appName, preferences, streamParser.getForceQuitApp(), &app);
             engine.rootContext()->setContextProperty("launcher", launcher);
 
             // Reuse the kioskMode flag for the stream subprocess so the

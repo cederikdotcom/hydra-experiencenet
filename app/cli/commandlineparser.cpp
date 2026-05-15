@@ -383,6 +383,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addChoiceOption("capture-system-keys", "capture system key combos", m_CaptureSysKeysModeMap.keys());
     parser.addChoiceOption("video-codec", "video codec", m_VideoCodecMap.keys());
     parser.addChoiceOption("video-decoder", "video decoder", m_VideoDecoderMap.keys());
+    parser.addFlagOption("force-quit-app", "automatically quit any currently running app without prompting");
 
     if (!parser.parse(args)) {
         parser.showError(parser.errorText());
@@ -533,6 +534,8 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
         parser.showError("App not provided");
     }
     m_AppName = parser.positionalArguments().at(2);
+
+    m_ForceQuitApp = parser.isSet("force-quit-app");
 }
 
 QString StreamCommandLineParser::getHost() const
@@ -543,6 +546,11 @@ QString StreamCommandLineParser::getHost() const
 QString StreamCommandLineParser::getAppName() const
 {
     return m_AppName;
+}
+
+bool StreamCommandLineParser::getForceQuitApp() const
+{
+    return m_ForceQuitApp;
 }
 
 ListCommandLineParser::ListCommandLineParser()

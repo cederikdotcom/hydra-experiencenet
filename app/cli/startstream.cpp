@@ -104,6 +104,9 @@ public:
                         m_State = StateStartSession;
                         session = new Session(m_Computer, app, m_Preferences);
                         emit q->sessionCreated(app.name, session);
+                    } else if (m_ForceQuit) {
+                        Event quitEvent(Event::AppQuitRequested);
+                        handleEvent(quitEvent);
                     } else {
                         emit q->appQuitRequired(getCurrentAppName());
                     }
@@ -179,10 +182,11 @@ public:
     NvComputer *m_Computer;
     State m_State;
     QTimer *m_TimeoutTimer;
+    bool m_ForceQuit;
 };
 
 Launcher::Launcher(QString computer, QString app,
-                   StreamingPreferences* preferences, QObject *parent)
+                   StreamingPreferences* preferences, bool forceQuit, QObject *parent)
     : QObject(parent),
       m_DPtr(new LauncherPrivate(this))
 {
@@ -190,6 +194,7 @@ Launcher::Launcher(QString computer, QString app,
     d->m_ComputerName = computer;
     d->m_AppName = app;
     d->m_Preferences = preferences;
+    d->m_ForceQuit = forceQuit;
     d->m_State = StateInit;
     d->m_TimeoutTimer = new QTimer(this);
     d->m_TimeoutTimer->setSingleShot(true);
