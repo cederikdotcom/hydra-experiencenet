@@ -15,6 +15,7 @@ Item {
     property string streamingExperience: ""
     property string errorMessage: ""
     property var statusPollTimer: null
+    property bool helpVisible: false
 
     StackView.onActivated: {
         toolBar.visible = false
@@ -263,6 +264,38 @@ Item {
                     font.family: ""
                 }
             }
+
+            // Help button
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                width: 36
+                height: 36
+                radius: 18
+                color: helpButtonArea.containsMouse ? "#6366f1" : "#27272a"
+                border.color: "#3f3f46"
+                border.width: 1
+
+                Behavior on color {
+                    ColorAnimation { duration: 150 }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "?"
+                    color: "#ffffff"
+                    font.pixelSize: 16
+                    font.weight: Font.Bold
+                    font.family: ""
+                }
+
+                MouseArea {
+                    id: helpButtonArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: kioskRoot.helpVisible = true
+                }
+            }
         }
 
         // Bottom border
@@ -444,5 +477,152 @@ Item {
         }
 
         ScrollBar.vertical: ScrollBar {}
+    }
+
+    // Help dialog
+    Rectangle {
+        anchors.fill: parent
+        color: "#80000000"
+        visible: helpVisible
+        z: 100
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: helpVisible = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 460
+            radius: 16
+            color: "#18181b"
+            border.color: "#27272a"
+            border.width: 1
+            implicitHeight: helpDialogContent.implicitHeight + 64
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            Column {
+                id: helpDialogContent
+                anchors.centerIn: parent
+                width: parent.width - 64
+                spacing: 24
+
+                Text {
+                    width: parent.width
+                    text: qsTr("Need help?")
+                    color: "#ffffff"
+                    font.pixelSize: 22
+                    font.weight: Font.DemiBold
+                    font.family: ""
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 10
+
+                    Text {
+                        width: parent.width
+                        text: qsTr("Report an issue")
+                        color: "#a1a1aa"
+                        font.pixelSize: 13
+                        font.family: ""
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: reportLinkText.implicitWidth + 32
+                        height: 40
+                        radius: 8
+                        color: reportLinkArea.containsMouse ? "#4f46e5" : "#6366f1"
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+
+                        Text {
+                            id: reportLinkText
+                            anchors.centerIn: parent
+                            text: "issues.experiencenet.com"
+                            color: "#ffffff"
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                            font.family: ""
+                        }
+
+                        MouseArea {
+                            id: reportLinkArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Qt.openUrlExternally("https://issues.experiencenet.com")
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#27272a"
+                }
+
+                Column {
+                    width: parent.width
+                    spacing: 8
+
+                    Text {
+                        width: parent.width
+                        text: qsTr("Urgent matter?")
+                        color: "#a1a1aa"
+                        font.pixelSize: 13
+                        font.family: ""
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: "+32 499 27 84 20"
+                        color: "#ffffff"
+                        font.pixelSize: 22
+                        font.weight: Font.DemiBold
+                        font.family: ""
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+                }
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: closeHelpText.implicitWidth + 40
+                    height: 36
+                    radius: 8
+                    color: closeHelpArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                    Behavior on color {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    Text {
+                        id: closeHelpText
+                        anchors.centerIn: parent
+                        text: qsTr("Close")
+                        color: "#a1a1aa"
+                        font.pixelSize: 14
+                        font.family: ""
+                    }
+
+                    MouseArea {
+                        id: closeHelpArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: helpVisible = false
+                    }
+                }
+            }
+        }
     }
 }
