@@ -151,10 +151,17 @@ as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
 loaded by `StreamSegue.qml` when the stream connection starts. v6.1.11
 extends this so `KioskView.qml` loads the same overlay as soon as the
 experience library activates, which means the handle is also visible on
-the grid. When no Session is bound (kiosk view), the overlay's tap handler
-no-ops — the handle is purely for visual consistency there. Qt Quick
-handles hit testing, hover, and click routing natively — no SDL drawable
-coordinate math, no interaction with the Moonlight mouse capture mode.
+the grid. v6.1.33 wires the overlay for **agent-initiated streams** (central
+assignment): `LocalServer` gained a `POST /api/v1/overlay/show` endpoint
+that emits an `overlayShowRequested` signal; `KioskView` responds via a
+`Connections` block (same lazy-load pattern as `StackView.onActivated`); and
+`hydraheadflatscreen` v2.0.60 calls this endpoint immediately after the
+stream subprocess is confirmed running. When no Session is bound (kiosk grid
+or agent-initiated stream), the overlay's "Exit experience" tap now calls
+`POST http://127.0.0.1:9740/api/v1/stream/stop` on the agent instead of
+no-oping, then shows the quitting veil. Qt Quick handles hit testing, hover,
+and click routing natively — no SDL drawable coordinate math, no interaction
+with the Moonlight mouse capture mode.
 The window is destroyed on `sessionReadyForDeletion` so it does not hold
 a Session reference beyond its lifetime. The older SDL/Metal overlay
 (`OverlayExitButton` / `OverlayExitMenu` in `overlaymanager.h`) is still
