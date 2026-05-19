@@ -1048,6 +1048,7 @@ int main(int argc, char *argv[])
             // Start the local view API server for screenshot proxying.
             auto* localServer = new LocalServer(&app);
             localServer->start();
+            engine.rootContext()->setContextProperty("localServerBridge", localServer);
 
             break;
         }

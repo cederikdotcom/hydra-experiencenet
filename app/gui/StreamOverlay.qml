@@ -166,18 +166,20 @@ Window {
             onClicked: {
                 exitDropdown.visible = false
                 if (streamOverlayWindow.session !== null) {
-                    // Real exit path: expand to fullscreen black veil
-                    // to cover the stream-Space → kiosk-Space hand-off,
-                    // then ask the session to disconnect. A safety
-                    // timer collapses the veil back unconditionally.
+                    // Kiosk-initiated stream: exit via the Qt Session object.
                     streamOverlayWindow.quitting = true
                     collapseTimer.restart()
                     streamOverlayWindow.session.triggerExitFromMenu()
+                } else {
+                    // Agent-initiated stream: no Qt Session object.
+                    // Ask the hydraheadflatscreen agent to stop the stream,
+                    // then show the quitting veil to cover the transition.
+                    var xhr = new XMLHttpRequest()
+                    xhr.open("POST", "http://127.0.0.1:9740/api/v1/stream/stop", true)
+                    xhr.send()
+                    streamOverlayWindow.quitting = true
+                    collapseTimer.restart()
                 }
-                // If session is null (kiosk grid context), there's
-                // nothing to exit from — just collapse the dropdown
-                // and keep the handle visible so the menu can be
-                // re-opened.
             }
         }
     }

@@ -66,6 +66,25 @@ Item {
         source: "qrc:/gui/StreamOverlay.qml"
     }
 
+    // Agent-initiated streams (central assignment) hide the kiosk window
+    // and launch the stream subprocess directly — they never go through
+    // StreamSegue, so connectionStarted() is never called and the overlay
+    // never appears on its own. The agent calls POST /api/v1/overlay/show
+    // on the local server after the stream starts; we respond here by
+    // activating and showing the overlay the same way StackView.onActivated
+    // does it above.
+    Connections {
+        target: localServerBridge
+        function onOverlayShowRequested() {
+            if (kioskOverlayLoader.item === null) {
+                kioskOverlayLoader.active = true
+            }
+            if (kioskOverlayLoader.item !== null) {
+                kioskOverlayLoader.item.visible = true
+            }
+        }
+    }
+
     // HTTP helper: GET
     function fetchData(url, callback) {
         var xhr = new XMLHttpRequest()

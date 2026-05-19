@@ -10,6 +10,7 @@
 //   GET /api/v1/probe?host=IP&port=PORT - TCP connectivity check (routes through app's TCC)
 //   POST /api/v1/window/hide - hide the kiosk window (stream takes over display)
 //   POST /api/v1/window/show - show the kiosk window (stream ended)
+//   POST /api/v1/overlay/show - raise the exit overlay on top of an agent-initiated stream
 class LocalServer : public QObject
 {
     Q_OBJECT
@@ -20,6 +21,9 @@ public:
 
     bool start(quint16 port = 9741);
 
+signals:
+    void overlayShowRequested();
+
 private slots:
     void handleConnection();
 
@@ -28,6 +32,7 @@ private:
     void handleProbe(QTcpSocket* socket, const QByteArray& path);
     void handleWindowHide(QTcpSocket* socket);
     void handleWindowShow(QTcpSocket* socket);
+    void handleOverlayShow(QTcpSocket* socket);
     void sendResponse(QTcpSocket* socket, int statusCode, const QByteArray& contentType, const QByteArray& body);
     void sendError(QTcpSocket* socket, int statusCode, const QString& message);
 

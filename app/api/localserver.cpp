@@ -81,6 +81,8 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
         handleWindowHide(socket);
     } else if (method == "POST" && path == "/api/v1/window/show") {
         handleWindowShow(socket);
+    } else if (method == "POST" && path == "/api/v1/overlay/show") {
+        handleOverlayShow(socket);
     } else {
         sendError(socket, 404, "Not Found");
     }
@@ -156,6 +158,13 @@ void LocalServer::handleWindowShow(QTcpSocket* socket)
     }
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "LocalServer: kiosk window shown");
     sendResponse(socket, 200, "application/json", "{\"status\":\"shown\"}");
+}
+
+void LocalServer::handleOverlayShow(QTcpSocket* socket)
+{
+    emit overlayShowRequested();
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "LocalServer: overlay show requested");
+    sendResponse(socket, 200, "application/json", "{\"status\":\"requested\"}");
 }
 
 void LocalServer::sendResponse(QTcpSocket* socket, int statusCode,
