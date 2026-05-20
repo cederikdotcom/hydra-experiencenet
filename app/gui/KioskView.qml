@@ -16,6 +16,11 @@ Item {
     property string errorMessage: ""
     property var statusPollTimer: null
     property bool helpVisible: false
+    property string helpTab: "help"
+    property var diagnosticsChecks: []
+    property bool diagnosticsLoading: false
+    property var logEntries: []
+    property bool logsLoading: false
 
     StackView.onActivated: {
         toolBar.visible = false
@@ -129,6 +134,40 @@ Item {
             }
             loading = false
         })
+    }
+
+    function runDiagnostics() {
+        diagnosticsLoading = true
+        diagnosticsChecks = []
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                diagnosticsLoading = false
+                if (xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText)
+                    diagnosticsChecks = data.checks || []
+                }
+            }
+        }
+        xhr.open("GET", "http://127.0.0.1:9740/api/v1/diagnostics")
+        xhr.send()
+    }
+
+    function fetchLogs() {
+        logsLoading = true
+        logEntries = []
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                logsLoading = false
+                if (xhr.status === 200) {
+                    var data = JSON.parse(xhr.responseText)
+                    logEntries = data.entries || data.lines || []
+                }
+            }
+        }
+        xhr.open("GET", "http://127.0.0.1:9740/api/v1/logs")
+        xhr.send()
     }
 
     function startStream(experienceName) {
@@ -507,7 +546,10 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: helpVisible = false
+            onClicked: {
+                helpVisible = false
+                helpTab = "help"
+            }
         }
 
         Rectangle {
@@ -529,107 +571,426 @@ Item {
                 width: parent.width - 64
                 spacing: 24
 
-                Text {
+                // ── Help tab ──
+                Column {
                     width: parent.width
-                    text: qsTr("Need help?")
-                    color: "#ffffff"
-                    font.pixelSize: 22
-                    font.weight: Font.DemiBold
-                    font.family: ""
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 64
-
-                    // Report an issue
-                    Column {
-                        spacing: 12
-
-                        Rectangle {
-                            width: 160
-                            height: 160
-                            color: "#ffffff"
-                            radius: 8
-
-                            Image {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                source: "qrc:/res/qr_issue.svg"
-                                fillMode: Image.PreserveAspectFit
-                                smooth: false
-                            }
-                        }
-
-                        Text {
-                            width: 160
-                            text: qsTr("Scan to report an issue")
-                            color: "#a1a1aa"
-                            font.pixelSize: 12
-                            font.family: ""
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                        }
-                    }
-
-                    // Call for urgent matters
-                    Column {
-                        spacing: 12
-
-                        Rectangle {
-                            width: 160
-                            height: 160
-                            color: "#ffffff"
-                            radius: 8
-
-                            Image {
-                                anchors.fill: parent
-                                anchors.margins: 8
-                                source: "qrc:/res/qr_phone.svg"
-                                fillMode: Image.PreserveAspectFit
-                                smooth: false
-                            }
-                        }
-
-                        Text {
-                            width: 160
-                            text: qsTr("Scan to call for urgent help\n+32 499 27 84 20")
-                            color: "#a1a1aa"
-                            font.pixelSize: 12
-                            font.family: ""
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: closeHelpText.implicitWidth + 40
-                    height: 36
-                    radius: 8
-                    color: closeHelpArea.containsMouse ? "#3f3f46" : "#27272a"
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
+                    spacing: 24
+                    visible: helpTab === "help"
 
                     Text {
-                        id: closeHelpText
-                        anchors.centerIn: parent
-                        text: qsTr("Close")
-                        color: "#a1a1aa"
-                        font.pixelSize: 14
+                        width: parent.width
+                        text: qsTr("Need help?")
+                        color: "#ffffff"
+                        font.pixelSize: 22
+                        font.weight: Font.DemiBold
                         font.family: ""
+                        horizontalAlignment: Text.AlignHCenter
                     }
 
-                    MouseArea {
-                        id: closeHelpArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: helpVisible = false
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 64
+
+                        Column {
+                            spacing: 12
+
+                            Rectangle {
+                                width: 160
+                                height: 160
+                                color: "#ffffff"
+                                radius: 8
+
+                                Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    source: "qrc:/res/qr_issue.svg"
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: false
+                                }
+                            }
+
+                            Text {
+                                width: 160
+                                text: qsTr("Scan to report an issue")
+                                color: "#a1a1aa"
+                                font.pixelSize: 12
+                                font.family: ""
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                            }
+                        }
+
+                        Column {
+                            spacing: 12
+
+                            Rectangle {
+                                width: 160
+                                height: 160
+                                color: "#ffffff"
+                                radius: 8
+
+                                Image {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    source: "qrc:/res/qr_phone.svg"
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: false
+                                }
+                            }
+
+                            Text {
+                                width: 160
+                                text: qsTr("Scan to call for urgent help\n+32 499 27 84 20")
+                                color: "#a1a1aa"
+                                font.pixelSize: 12
+                                font.family: ""
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 1
+                        color: "#27272a"
+                    }
+
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 12
+
+                        Rectangle {
+                            width: 152
+                            height: 34
+                            radius: 8
+                            color: diagToolArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                            Behavior on color {
+                                ColorAnimation { duration: 150 }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Diagnostics")
+                                color: "#71717a"
+                                font.pixelSize: 13
+                                font.family: ""
+                            }
+
+                            MouseArea {
+                                id: diagToolArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    helpTab = "diagnostics"
+                                    runDiagnostics()
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 152
+                            height: 34
+                            radius: 8
+                            color: logsToolArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                            Behavior on color {
+                                ColorAnimation { duration: 150 }
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: qsTr("Logs")
+                                color: "#71717a"
+                                font.pixelSize: 13
+                                font.family: ""
+                            }
+
+                            MouseArea {
+                                id: logsToolArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    helpTab = "logs"
+                                    fetchLogs()
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: closeHelpText.implicitWidth + 40
+                        height: 36
+                        radius: 8
+                        color: closeHelpArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+
+                        Text {
+                            id: closeHelpText
+                            anchors.centerIn: parent
+                            text: qsTr("Close")
+                            color: "#a1a1aa"
+                            font.pixelSize: 14
+                            font.family: ""
+                        }
+
+                        MouseArea {
+                            id: closeHelpArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: helpVisible = false
+                        }
+                    }
+                }
+
+                // ── Diagnostics tab ──
+                Column {
+                    width: parent.width
+                    spacing: 20
+                    visible: helpTab === "diagnostics"
+
+                    Item {
+                        width: parent.width
+                        height: 32
+
+                        Rectangle {
+                            width: 28
+                            height: 28
+                            radius: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: backDiagArea.containsMouse ? "#3f3f46" : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "←"
+                                color: "#a1a1aa"
+                                font.pixelSize: 16
+                                font.family: ""
+                            }
+
+                            MouseArea {
+                                id: backDiagArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: helpTab = "help"
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("Diagnostics")
+                            color: "#ffffff"
+                            font.pixelSize: 18
+                            font.weight: Font.DemiBold
+                            font.family: ""
+                        }
+                    }
+
+                    BusyIndicator {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        running: visible
+                        visible: diagnosticsLoading
+                        Material.accent: "#6366f1"
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: 10
+                        visible: !diagnosticsLoading && diagnosticsChecks.length > 0
+
+                        Repeater {
+                            model: diagnosticsChecks
+                            delegate: Row {
+                                width: parent.width
+                                spacing: 12
+
+                                Text {
+                                    text: modelData.status === "passed" ? "✓" :
+                                          modelData.status === "failed" ? "✗" : "−"
+                                    color: modelData.status === "passed" ? "#22c55e" :
+                                           modelData.status === "failed" ? "#ef4444" : "#71717a"
+                                    font.pixelSize: 16
+                                    font.family: ""
+                                    width: 20
+                                }
+
+                                Column {
+                                    spacing: 2
+                                    width: parent.width - 32
+
+                                    Text {
+                                        text: modelData.label || ""
+                                        color: "#d4d4d8"
+                                        font.pixelSize: 14
+                                        font.family: ""
+                                        width: parent.width
+                                        elide: Text.ElideRight
+                                    }
+
+                                    Text {
+                                        visible: (modelData.detail || "") !== ""
+                                        text: modelData.detail || ""
+                                        color: "#71717a"
+                                        font.pixelSize: 11
+                                        font.family: ""
+                                        width: parent.width
+                                        wrapMode: Text.NoWrap
+                                        elide: Text.ElideRight
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: rerunText.implicitWidth + 40
+                        height: 34
+                        radius: 8
+                        visible: !diagnosticsLoading
+                        color: rerunArea.containsMouse ? "#4f46e5" : "#6366f1"
+
+                        Behavior on color {
+                            ColorAnimation { duration: 150 }
+                        }
+
+                        Text {
+                            id: rerunText
+                            anchors.centerIn: parent
+                            text: qsTr("Re-run")
+                            color: "#ffffff"
+                            font.pixelSize: 13
+                            font.family: ""
+                        }
+
+                        MouseArea {
+                            id: rerunArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: runDiagnostics()
+                        }
+                    }
+                }
+
+                // ── Logs tab ──
+                Column {
+                    width: parent.width
+                    spacing: 16
+                    visible: helpTab === "logs"
+
+                    Item {
+                        width: parent.width
+                        height: 32
+
+                        Rectangle {
+                            width: 28
+                            height: 28
+                            radius: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: backLogsArea.containsMouse ? "#3f3f46" : "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "←"
+                                color: "#a1a1aa"
+                                font.pixelSize: 16
+                                font.family: ""
+                            }
+
+                            MouseArea {
+                                id: backLogsArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: helpTab = "help"
+                            }
+                        }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("Logs")
+                            color: "#ffffff"
+                            font.pixelSize: 18
+                            font.weight: Font.DemiBold
+                            font.family: ""
+                        }
+                    }
+
+                    BusyIndicator {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        running: visible
+                        visible: logsLoading
+                        Material.accent: "#6366f1"
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 280
+                        visible: !logsLoading
+                        color: "#0f0f0f"
+                        radius: 8
+                        clip: true
+
+                        Flickable {
+                            id: logsFlickable
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            contentHeight: logsColumn.height
+                            contentWidth: width
+                            clip: true
+
+                            Column {
+                                id: logsColumn
+                                width: logsFlickable.width
+                                spacing: 4
+
+                                onHeightChanged: {
+                                    logsFlickable.contentY = Math.max(0, logsColumn.height - logsFlickable.height)
+                                }
+
+                                Repeater {
+                                    model: logEntries
+                                    delegate: Row {
+                                        width: logsColumn.width
+                                        spacing: 8
+
+                                        Text {
+                                            text: {
+                                                var ts = (modelData && modelData.timestamp) ? modelData.timestamp : ""
+                                                return ts.length >= 19 ? ts.substring(11, 19) : ts
+                                            }
+                                            color: "#52525b"
+                                            font.pixelSize: 11
+                                            font.family: "monospace"
+                                            width: 64
+                                        }
+
+                                        Text {
+                                            text: (modelData && modelData.message) ? modelData.message :
+                                                  (typeof modelData === "string" ? modelData : "")
+                                            color: "#a1a1aa"
+                                            font.pixelSize: 11
+                                            font.family: "monospace"
+                                            width: logsColumn.width - 72
+                                            wrapMode: Text.WrapAnywhere
+                                        }
+                                    }
+                                }
+                            }
+
+                            ScrollBar.vertical: ScrollBar {}
+                        }
                     }
                 }
             }
