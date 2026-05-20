@@ -21,6 +21,9 @@ Item {
     property bool diagnosticsLoading: false
     property var logEntries: []
     property bool logsLoading: false
+    property bool filingIssue: false
+    property string issueFiledUrl: ""
+    property string issueFilingError: ""
 
     StackView.onActivated: {
         toolBar.visible = false
@@ -168,6 +171,79 @@ Item {
         }
         xhr.open("GET", "http://127.0.0.1:9740/api/v1/logs")
         xhr.send()
+    }
+
+    function fileIssue() {
+        filingIssue = true
+        issueFiledUrl = ""
+        issueFilingError = ""
+
+        var diagXhr = new XMLHttpRequest()
+        diagXhr.onreadystatechange = function() {
+            if (diagXhr.readyState !== XMLHttpRequest.DONE) return
+            var checks = []
+            if (diagXhr.status === 200) {
+                try { checks = JSON.parse(diagXhr.responseText).checks || [] } catch(e) {}
+            }
+
+            var logsXhr = new XMLHttpRequest()
+            logsXhr.onreadystatechange = function() {
+                if (logsXhr.readyState !== XMLHttpRequest.DONE) return
+                var entries = []
+                if (logsXhr.status === 200) {
+                    try {
+                        var ld = JSON.parse(logsXhr.responseText)
+                        entries = ld.entries || ld.lines || []
+                    } catch(e) {}
+                }
+
+                var desc = "## Diagnostics\n\n"
+                for (var i = 0; i < checks.length; i++) {
+                    var c = checks[i]
+                    var icon = c.status === "passed" ? "✓" : c.status === "failed" ? "✗" : "−"
+                    desc += icon + " " + c.label + (c.detail ? ": " + c.detail : "") + "\n"
+                }
+
+                if (entries.length > 0) {
+                    desc += "\n## Recent logs\n\n```\n"
+                    var tail = entries.slice(-50)
+                    for (var j = 0; j < tail.length; j++) {
+                        var e = tail[j]
+                        var ts = (e && e.timestamp) ? e.timestamp.substring(11, 19) : ""
+                        var msg = (e && e.message) ? e.message : (typeof e === "string" ? e : "")
+                        desc += ts + "  " + msg + "\n"
+                    }
+                    desc += "```\n"
+                }
+
+                var postXhr = new XMLHttpRequest()
+                postXhr.onreadystatechange = function() {
+                    if (postXhr.readyState !== XMLHttpRequest.DONE) return
+                    filingIssue = false
+                    if (postXhr.status === 200 || postXhr.status === 201) {
+                        try {
+                            var r = JSON.parse(postXhr.responseText)
+                            issueFiledUrl = r.url || ("#" + r.id)
+                        } catch(e) {
+                            issueFiledUrl = "filed"
+                        }
+                    } else {
+                        issueFilingError = "Could not file issue (" + postXhr.status + ")"
+                    }
+                }
+                postXhr.open("POST", "https://issues.experiencenet.com/report")
+                postXhr.setRequestHeader("Content-Type", "application/json")
+                postXhr.send(JSON.stringify({
+                    "project": "hydraheadflatscreen",
+                    "title": "Issue reported from kiosk",
+                    "description": desc
+                }))
+            }
+            logsXhr.open("GET", "http://127.0.0.1:9740/api/v1/logs")
+            logsXhr.send()
+        }
+        diagXhr.open("GET", "http://127.0.0.1:9740/api/v1/diagnostics")
+        diagXhr.send()
     }
 
     function startStream(experienceName) {
@@ -549,6 +625,8 @@ Item {
             onClicked: {
                 helpVisible = false
                 helpTab = "help"
+                issueFiledUrl = ""
+                issueFilingError = ""
             }
         }
 
@@ -659,10 +737,10 @@ Item {
 
                     Row {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        spacing: 12
+                        spacing: 8
 
                         Rectangle {
-                            width: 152
+                            width: 120
                             height: 34
                             radius: 8
                             color: diagToolArea.containsMouse ? "#3f3f46" : "#27272a"
@@ -692,7 +770,7 @@ Item {
                         }
 
                         Rectangle {
-                            width: 152
+                            width: 120
                             height: 34
                             radius: 8
                             color: logsToolArea.containsMouse ? "#3f3f46" : "#27272a"
@@ -720,6 +798,57 @@ Item {
                                 }
                             }
                         }
+
+                        Rectangle {
+                            width: 120
+                            height: 34
+                            radius: 8
+                            color: createIssueArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                            Behavior on color {
+                                ColorAnimation { duration: 150 }
+                            }
+
+                            BusyIndicator {
+                                anchors.centerIn: parent
+                                running: visible
+                                visible: filingIssue
+                                width: 20
+                                height: 20
+                                Material.accent: "#71717a"
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: !filingIssue
+                                text: qsTr("Create issue")
+                                color: "#71717a"
+                                font.pixelSize: 13
+                                font.family: ""
+                            }
+
+                            MouseArea {
+                                id: createIssueArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                enabled: !filingIssue
+                                onClicked: fileIssue()
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: issueFiledUrl !== "" || issueFilingError !== ""
+                        text: issueFiledUrl !== "" ? qsTr("Issue filed: ") + issueFiledUrl :
+                              issueFilingError
+                        color: issueFiledUrl !== "" ? "#22c55e" : "#ef4444"
+                        font.pixelSize: 12
+                        font.family: ""
+                        wrapMode: Text.Wrap
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
                     }
 
                     Rectangle {
@@ -747,7 +876,11 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: helpVisible = false
+                            onClicked: {
+                                helpVisible = false
+                                issueFiledUrl = ""
+                                issueFilingError = ""
+                            }
                         }
                     }
                 }
