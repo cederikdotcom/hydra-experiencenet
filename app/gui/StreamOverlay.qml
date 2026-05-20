@@ -8,24 +8,22 @@ import KioskBridge 1.0
 // Floating, frameless, translucent window that rides on top of the
 // streaming SDL window during an active session. Shows a subtle
 // circular handle that expands into a dropdown with "Exit experience"
-// (primary) and two operator tools — Diagnostics and Logs — in a
-// smaller secondary row below.
+// (primary) and a smaller secondary row — Diagnostics | Logs — for
+// operator use.
 //
-// Tapping "Diagnostics" or "Logs" expands the window into a panel that
-// calls the hydraheadflatscreen local API (port 9740) and renders the
-// results inline. A ← Back button returns to the menu.
+// The diagnostics/logs panels open in a SEPARATE child Window so the
+// main overlay never resizes during a stream. Resizing an always-on-top
+// window above a macOS fullscreen stream can trigger a Space transition
+// event that disconnects Moonlight; using a new Tool window avoids this.
 Window {
     id: streamOverlayWindow
 
     property Session session: null
     property int handleSize: 40
     property int menuWidth: 220
-    property int menuHeight: 89   // 52 (exit) + 1 (separator) + 36 (secondary row)
-    property int panelWidth: 420
-    property int diagPanelHeight: 340
-    property int logsPanelHeight: 400
+    property int menuHeight: 89   // 52 (exit) + 1 (sep) + 36 (secondary row)
 
-    // "" = handle only, "menu" = dropdown open, "diagnostics" / "logs" = panel
+    // "" = handle only, "menu" = dropdown, "diagnostics" / "logs" = panel window
     property string displayMode: ""
 
     // Diagnostics state
@@ -54,24 +52,6 @@ Window {
         KioskBridge.makeFollowAllSpaces(streamOverlayWindow)
     }
 
-    // Resize window when display mode changes; quitting overrides separately.
-    onDisplayModeChanged: {
-        if (displayMode === "diagnostics") {
-            streamOverlayWindow.width  = panelWidth
-            streamOverlayWindow.height = handleSize + 8 + diagPanelHeight
-            streamOverlayWindow.x      = (Screen.width - panelWidth) / 2
-        } else if (displayMode === "logs") {
-            streamOverlayWindow.width  = panelWidth
-            streamOverlayWindow.height = handleSize + 8 + logsPanelHeight
-            streamOverlayWindow.x      = (Screen.width - panelWidth) / 2
-        } else {
-            streamOverlayWindow.width  = collapsedWidth
-            streamOverlayWindow.height = collapsedHeight
-            streamOverlayWindow.x      = collapsedX
-        }
-    }
-
-    // Timer safeguard: collapse window back after exit transition.
     Timer {
         id: collapseTimer
         interval: 1500
@@ -97,7 +77,6 @@ Window {
         }
     }
 
-    // Fetch diagnostics from the local agent API.
     function runDiagnostics() {
         diagnosticsLoading = true
         diagnosticsData    = null
@@ -113,7 +92,6 @@ Window {
         xhr.send()
     }
 
-    // Fetch log entries from the local agent API.
     function fetchLogs() {
         logsLoading = true
         logsData    = []
@@ -134,7 +112,7 @@ Window {
         xhr.send()
     }
 
-    // Fullscreen black veil shown during the exit transition.
+    // ─── Quitting veil ──────────────────────────────────────────────────────
     Rectangle {
         id: quittingVeil
         anchors.fill: parent
@@ -151,7 +129,7 @@ Window {
         }
     }
 
-    // Circular ⋯ handle button at the top of the window.
+    // ─── Handle ─────────────────────────────────────────────────────────────
     Rectangle {
         id: handleButton
         visible: !streamOverlayWindow.quitting
@@ -185,8 +163,6 @@ Window {
     }
 
     // ─── Dropdown menu ──────────────────────────────────────────────────────
-    // Shown when displayMode === "menu". Primary item: Exit experience.
-    // Secondary row: Diagnostics | Logs (smaller, muted).
     Rectangle {
         id: menuDropdown
         visible: displayMode === "menu" && !streamOverlayWindow.quitting
@@ -205,7 +181,7 @@ Window {
             anchors.fill: parent
             spacing: 0
 
-            // Exit experience — primary, full-width
+            // Exit experience — primary
             Rectangle {
                 width: parent.width
                 height: 52
@@ -249,7 +225,7 @@ Window {
                 opacity: 0.3
             }
 
-            // Secondary row: Diagnostics | divider | Logs
+            // Secondary row: Diagnostics | Logs
             Row {
                 width: parent.width
                 height: 36
@@ -314,318 +290,335 @@ Window {
         }
     }
 
-    // ─── Diagnostics panel ──────────────────────────────────────────────────
-    Rectangle {
-        id: diagnosticsPanel
-        visible: displayMode === "diagnostics" && !streamOverlayWindow.quitting
-        anchors.top: handleButton.bottom
-        anchors.topMargin: 8
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: panelWidth
-        height: diagPanelHeight
-        color: "#CC000000"
-        radius: 10
-        border.color: "#FFFFFFFF"
-        border.width: 1
-        clip: true
+    // ─── Panel window ────────────────────────────────────────────────────────
+    // A separate OS window so the main overlay never resizes during a stream.
+    Window {
+        id: panelWindow
 
-        Column {
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 8
+        readonly property int panelWidth:          420
+        readonly property int diagContentHeight:   340
+        readonly property int logsContentHeight:   400
+        readonly property int panelX:              (Screen.width - panelWidth) / 2
+        readonly property int panelY:              streamOverlayWindow.y
+        readonly property int contentTopMargin:    streamOverlayWindow.handleSize + 8
 
-            // Header
-            Item {
-                width: parent.width
-                height: 28
+        visible: (displayMode === "diagnostics" || displayMode === "logs") &&
+                 !streamOverlayWindow.quitting && streamOverlayWindow.visible
+        width:  panelWidth
+        height: contentTopMargin + (displayMode === "logs" ? logsContentHeight : diagContentHeight)
+        x:      panelX
+        y:      panelY
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: backDiagArea.implicitWidth + 16
-                    implicitWidth: backDiagText.implicitWidth + 16
-                    height: 26
-                    radius: 5
-                    color: backDiagArea.containsMouse ? "#3f3f46" : "#27272a"
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
+        color: "transparent"
 
-                    Text {
-                        id: backDiagText
-                        anchors.centerIn: parent
-                        text: "← Back"
-                        color: "#a1a1aa"
-                        font.pixelSize: 12
-                    }
+        Component.onCompleted: {
+            KioskBridge.makeFollowAllSpaces(panelWindow)
+        }
 
-                    MouseArea {
-                        id: backDiagArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: displayMode = "menu"
-                    }
-                }
+        // ── Diagnostics panel ──────────────────────────────────────────────
+        Rectangle {
+            visible: displayMode === "diagnostics"
+            anchors.top: parent.top
+            anchors.topMargin: panelWindow.contentTopMargin
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: panelWindow.panelWidth
+            height: panelWindow.diagContentHeight
+            color: "#CC000000"
+            radius: 10
+            border.color: "#FFFFFFFF"
+            border.width: 1
+            clip: true
 
-                Text {
-                    anchors.centerIn: parent
-                    text: qsTr("Diagnostics")
-                    color: "white"
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                }
-
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: rerunArea.implicitWidth + 16
-                    implicitWidth: rerunText.implicitWidth + 16
-                    height: 26
-                    radius: 5
-                    color: rerunArea.containsMouse ? "#3f3f46" : "#27272a"
-                    visible: !diagnosticsLoading
-
-                    Text {
-                        id: rerunText
-                        anchors.centerIn: parent
-                        text: qsTr("Re-run")
-                        color: "#a1a1aa"
-                        font.pixelSize: 12
-                    }
-
-                    MouseArea {
-                        id: rerunArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: runDiagnostics()
-                    }
-                }
-            }
-
-            // Separator
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: "#FFFFFFFF"
-                opacity: 0.3
-            }
-
-            // Loading indicator
-            Text {
-                visible: diagnosticsLoading
-                width: parent.width
-                text: qsTr("Running checks…")
-                color: "#a1a1aa"
-                font.pixelSize: 13
-                horizontalAlignment: Text.AlignHCenter
-                topPadding: 16
-            }
-
-            // Check rows
             Column {
-                visible: !diagnosticsLoading && diagnosticsData !== null
-                width: parent.width
-                spacing: 0
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 8
 
-                Repeater {
-                    model: diagnosticsData ? diagnosticsData.checks : []
+                // Header
+                Item {
+                    width: parent.width
+                    height: 28
 
-                    Item {
-                        width: parent.width
-                        height: 44
+                    Rectangle {
+                        id: backDiagBtn
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: backDiagText.implicitWidth + 16
+                        height: 26
+                        radius: 5
+                        color: backDiagArea.containsMouse ? "#3f3f46" : "#27272a"
 
-                        // Subtle hover highlight
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "#10ffffff"
-                            visible: checkRowArea.containsMouse
-                            radius: 4
-                        }
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.leftMargin: 4
-                            anchors.rightMargin: 4
-                            spacing: 10
-
-                            Text {
-                                width: 18
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.status === "passed" ? "✓" :
-                                      modelData.status === "failed" ? "✗" : "−"
-                                color: modelData.status === "passed" ? "#22c55e" :
-                                       modelData.status === "failed" ? "#ef4444" : "#71717a"
-                                font.pixelSize: 15
-                            }
-
-                            Text {
-                                width: 160
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.label || ""
-                                color: "white"
-                                font.pixelSize: 13
-                                elide: Text.ElideRight
-                            }
-
-                            Text {
-                                width: parent.width - 18 - 160 - 20
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.detail || ""
-                                color: "#a1a1aa"
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                                horizontalAlignment: Text.AlignRight
-                            }
+                        Text {
+                            id: backDiagText
+                            anchors.centerIn: parent
+                            text: "← Back"
+                            color: "#a1a1aa"
+                            font.pixelSize: 12
                         }
 
                         MouseArea {
-                            id: checkRowArea
+                            id: backDiagArea
                             anchors.fill: parent
                             hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: displayMode = "menu"
+                        }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("Diagnostics")
+                        color: "white"
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: rerunText.implicitWidth + 16
+                        height: 26
+                        radius: 5
+                        color: rerunArea.containsMouse ? "#3f3f46" : "#27272a"
+                        visible: !diagnosticsLoading
+
+                        Text {
+                            id: rerunText
+                            anchors.centerIn: parent
+                            text: qsTr("Re-run")
+                            color: "#a1a1aa"
+                            font.pixelSize: 12
                         }
 
-                        Rectangle {
-                            anchors.bottom: parent.bottom
+                        MouseArea {
+                            id: rerunArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: runDiagnostics()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#FFFFFFFF"
+                    opacity: 0.3
+                }
+
+                Text {
+                    visible: diagnosticsLoading
+                    width: parent.width
+                    text: qsTr("Running checks…")
+                    color: "#a1a1aa"
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    topPadding: 12
+                }
+
+                Column {
+                    visible: !diagnosticsLoading && diagnosticsData !== null
+                    width: parent.width
+                    spacing: 0
+
+                    Repeater {
+                        model: diagnosticsData ? diagnosticsData.checks : []
+
+                        Item {
                             width: parent.width
-                            height: 1
-                            color: "#FFFFFFFF"
-                            opacity: 0.07
+                            height: 42
+
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "#10ffffff"
+                                visible: checkHover.containsMouse
+                                radius: 4
+                            }
+
+                            Row {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                anchors.rightMargin: 4
+                                spacing: 10
+
+                                Text {
+                                    width: 18
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.status === "passed" ? "✓" :
+                                          modelData.status === "failed" ? "✗" : "−"
+                                    color: modelData.status === "passed" ? "#22c55e" :
+                                           modelData.status === "failed" ? "#ef4444" : "#71717a"
+                                    font.pixelSize: 15
+                                }
+
+                                Text {
+                                    width: 160
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.label || ""
+                                    color: "white"
+                                    font.pixelSize: 13
+                                    elide: Text.ElideRight
+                                }
+
+                                Text {
+                                    width: parent.width - 18 - 160 - 20
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.detail || ""
+                                    color: "#a1a1aa"
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                    horizontalAlignment: Text.AlignRight
+                                }
+                            }
+
+                            MouseArea {
+                                id: checkHover
+                                anchors.fill: parent
+                                hoverEnabled: true
+                            }
+
+                            Rectangle {
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                                height: 1
+                                color: "#FFFFFFFF"
+                                opacity: 0.07
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // ─── Logs panel ─────────────────────────────────────────────────────────
-    Rectangle {
-        id: logsPanel
-        visible: displayMode === "logs" && !streamOverlayWindow.quitting
-        anchors.top: handleButton.bottom
-        anchors.topMargin: 8
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: panelWidth
-        height: logsPanelHeight
-        color: "#CC000000"
-        radius: 10
-        border.color: "#FFFFFFFF"
-        border.width: 1
-        clip: true
+        // ── Logs panel ─────────────────────────────────────────────────────
+        Rectangle {
+            visible: displayMode === "logs"
+            anchors.top: parent.top
+            anchors.topMargin: panelWindow.contentTopMargin
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: panelWindow.panelWidth
+            height: panelWindow.logsContentHeight
+            color: "#CC000000"
+            radius: 10
+            border.color: "#FFFFFFFF"
+            border.width: 1
+            clip: true
 
-        Column {
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 8
+            Column {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 8
 
-            // Header
-            Item {
-                width: parent.width
-                height: 28
+                // Header
+                Item {
+                    width: parent.width
+                    height: 28
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: backLogsArea.implicitWidth + 16
-                    implicitWidth: backLogsText.implicitWidth + 16
-                    height: 26
-                    radius: 5
-                    color: backLogsArea.containsMouse ? "#3f3f46" : "#27272a"
+                    Rectangle {
+                        id: backLogsBtn
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: backLogsText.implicitWidth + 16
+                        height: 26
+                        radius: 5
+                        color: backLogsArea.containsMouse ? "#3f3f46" : "#27272a"
+
+                        Text {
+                            id: backLogsText
+                            anchors.centerIn: parent
+                            text: "← Back"
+                            color: "#a1a1aa"
+                            font.pixelSize: 12
+                        }
+
+                        MouseArea {
+                            id: backLogsArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: displayMode = "menu"
+                        }
+                    }
 
                     Text {
-                        id: backLogsText
                         anchors.centerIn: parent
-                        text: "← Back"
-                        color: "#a1a1aa"
-                        font.pixelSize: 12
+                        text: qsTr("Logs")
+                        color: "white"
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
                     }
+                }
 
-                    MouseArea {
-                        id: backLogsArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: displayMode = "menu"
-                    }
+                Rectangle {
+                    width: parent.width
+                    height: 1
+                    color: "#FFFFFFFF"
+                    opacity: 0.3
                 }
 
                 Text {
-                    anchors.centerIn: parent
-                    text: qsTr("Logs")
-                    color: "white"
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                }
-            }
-
-            // Separator
-            Rectangle {
-                width: parent.width
-                height: 1
-                color: "#FFFFFFFF"
-                opacity: 0.3
-            }
-
-            // Loading indicator
-            Text {
-                visible: logsLoading
-                width: parent.width
-                text: qsTr("Loading…")
-                color: "#a1a1aa"
-                font.pixelSize: 13
-                horizontalAlignment: Text.AlignHCenter
-                topPadding: 16
-            }
-
-            // Scrollable log entries
-            Flickable {
-                visible: !logsLoading
-                width: parent.width
-                height: logsPanelHeight - 16 - 28 - 8 - 1 - 8 - 16  // panel - margins - header - spacing - sep - spacing - bottom margin
-                contentHeight: logColumn.implicitHeight
-                clip: true
-
-                ScrollBar.vertical: ScrollBar {
-                    policy: ScrollBar.AsNeeded
-                }
-
-                Column {
-                    id: logColumn
+                    visible: logsLoading
                     width: parent.width
-                    spacing: 1
+                    text: qsTr("Loading…")
+                    color: "#a1a1aa"
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    topPadding: 12
+                }
 
-                    Repeater {
-                        model: logsData
+                Flickable {
+                    visible: !logsLoading
+                    width: parent.width
+                    height: panelWindow.logsContentHeight - 16 - 28 - 8 - 1 - 8 - 16
+                    contentHeight: logColumn.implicitHeight
+                    clip: true
 
-                        Row {
-                            width: parent.width
-                            spacing: 8
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                    }
 
-                            Text {
-                                text: {
-                                    var ts = modelData.timestamp || ""
-                                    return ts.length >= 19 ? ts.substr(11, 8) : ts.substr(0, 8)
+                    Column {
+                        id: logColumn
+                        width: parent.width
+                        spacing: 1
+
+                        Repeater {
+                            model: logsData
+
+                            Row {
+                                width: parent.width
+                                spacing: 8
+
+                                Text {
+                                    text: {
+                                        var ts = modelData.timestamp || ""
+                                        return ts.length >= 19 ? ts.substr(11, 8) : ts.substr(0, 8)
+                                    }
+                                    color: "#52525b"
+                                    font.pixelSize: 11
+                                    font.family: "Courier New, Courier, monospace"
+                                    width: 58
                                 }
-                                color: "#52525b"
-                                font.pixelSize: 11
-                                font.family: "Courier New, Courier, monospace"
-                                width: 58
-                            }
 
-                            Text {
-                                width: parent.width - 58 - 8
-                                text: modelData.message || ""
-                                color: "#d4d4d8"
-                                font.pixelSize: 11
-                                font.family: "Courier New, Courier, monospace"
-                                elide: Text.ElideRight
-                                wrapMode: Text.NoWrap
+                                Text {
+                                    width: parent.width - 58 - 8
+                                    text: modelData.message || ""
+                                    color: "#d4d4d8"
+                                    font.pixelSize: 11
+                                    font.family: "Courier New, Courier, monospace"
+                                    elide: Text.ElideRight
+                                    wrapMode: Text.NoWrap
+                                }
                             }
                         }
                     }
-                }
 
-                onContentHeightChanged: {
-                    if (contentHeight > height)
-                        contentY = contentHeight - height
+                    onContentHeightChanged: {
+                        if (contentHeight > height)
+                            contentY = contentHeight - height
+                    }
                 }
             }
         }
