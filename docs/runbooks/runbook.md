@@ -143,8 +143,9 @@ Also update the fallback phone number text in `KioskView.qml` (`"Scan to call fo
 
 A subtle handle is visible at the top centre of the screen both during
 an active stream and on the experience library (kiosk grid). Tapping
-it opens a small dropdown menu with a single "Exit experience" item
-that slides out directly beneath the handle.
+it opens a dropdown with "Exit experience" as the primary item, and a
+smaller secondary row below it with two operator tools: **Diagnostics**
+and **Logs**.
 
 **Implementation:** as of v6.1.10 the handle + dropdown are implemented
 as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
@@ -172,6 +173,15 @@ cleanup once the QML overlay is proven out. Behaviour:
   the screen. Present throughout the stream and on the kiosk grid so
   the exit gesture is discoverable.
 - **Tap / click the handle:** toggles the dropdown. No disconnect yet.
+- **Diagnostics (secondary row):** opens a panel showing the 5-check
+  connectivity suite (cluster, catalog, body available, body reachable,
+  WireGuard routing). Calls `GET http://127.0.0.1:9740/api/v1/diagnostics`
+  on the hydraheadflatscreen agent. Requires v2.0.69+. A ← Back button
+  and a Re-run button are shown in the panel header.
+- **Logs (secondary row):** opens a scrollable panel of the last 500
+  in-memory log entries with timestamps. Calls
+  `GET http://127.0.0.1:9740/api/v1/logs`. Requires v2.0.69+. Newest
+  entries scroll to the bottom automatically.
 - **Tap / click "Exit experience":** triggers a clean disconnect. As of
   v6.1.25 the overlay also briefly expands to fullscreen with a black
   "Quitting experience" veil during the disconnect to cover the macOS
