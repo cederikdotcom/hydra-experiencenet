@@ -130,10 +130,11 @@ A "?" button sits in the top-right of the kiosk header (after the venue badge). 
 - **Left QR code** — encodes `https://issues.experiencenet.com`. Scanning opens the issue tracker in the visitor's browser.
 - **Right QR code** — encodes `tel:+3249927842020`. Scanning prompts the visitor's phone to call the urgent support number. The number `+32 499 27 84 20` is also printed below the QR code as a fallback.
 
-**Operator tools (below the QR codes, separated by a divider):** two smaller secondary buttons — **Diagnostics** and **Logs** — that open inline panels within the same dialog:
+**Operator tools (below the QR codes, separated by a divider):** three smaller secondary buttons — **Diagnostics**, **Logs**, and **Create issue** — in a single row:
 
 - **Diagnostics panel:** runs the 5-check connectivity suite (cluster connection, experience catalog, body available, body reachable, WireGuard routing) against `GET http://127.0.0.1:9740/api/v1/diagnostics`. Requires hydraheadflatscreen v2.0.69+. Shows ✓/✗/− icons with detail text per check. A Re-run button re-fires the checks. A ← Back button returns to the main help view.
 - **Logs panel:** fetches the last 500 in-memory log entries from `GET http://127.0.0.1:9740/api/v1/logs`. Requires v2.0.69+. Monospace, timestamp-prefixed, auto-scrolled to newest. A ← Back button returns to the main help view.
+- **Create issue:** fetches fresh diagnostics and the last 50 log entries, then POSTs a structured report to `https://issues.experiencenet.com/report` (project `hydraheadflatscreen`). Shows a spinner while in-flight, then displays the filed issue URL in green or an error in red. State resets on dialog close. This is the same format as `hydraheadflatscreen diagnostics --file-issue` on the CLI.
 
 The ? dialog is only reachable from the kiosk grid, never during an active stream, so opening it cannot affect a running Moonlight session.
 
