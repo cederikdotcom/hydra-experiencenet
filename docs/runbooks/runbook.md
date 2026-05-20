@@ -123,12 +123,21 @@ not follow into it.
 
 ## Help button (kiosk header)
 
-A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two QR codes side by side that visitors scan with their smartphone:
+A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two tabs of content.
+
+**Visitor content (default tab):** two QR codes side by side that visitors scan with their smartphone:
 
 - **Left QR code** — encodes `https://issues.experiencenet.com`. Scanning opens the issue tracker in the visitor's browser.
 - **Right QR code** — encodes `tel:+3249927842020`. Scanning prompts the visitor's phone to call the urgent support number. The number `+32 499 27 84 20` is also printed below the QR code as a fallback.
 
-Clicking the backdrop or the "Close" button dismisses the dialog. The dialog does not block the stream-start path — `helpVisible` is a local property of `KioskView.qml` and is unrelated to stream state.
+**Operator tools (below the QR codes, separated by a divider):** two smaller secondary buttons — **Diagnostics** and **Logs** — that open inline panels within the same dialog:
+
+- **Diagnostics panel:** runs the 5-check connectivity suite (cluster connection, experience catalog, body available, body reachable, WireGuard routing) against `GET http://127.0.0.1:9740/api/v1/diagnostics`. Requires hydraheadflatscreen v2.0.69+. Shows ✓/✗/− icons with detail text per check. A Re-run button re-fires the checks. A ← Back button returns to the main help view.
+- **Logs panel:** fetches the last 500 in-memory log entries from `GET http://127.0.0.1:9740/api/v1/logs`. Requires v2.0.69+. Monospace, timestamp-prefixed, auto-scrolled to newest. A ← Back button returns to the main help view.
+
+The ? dialog is only reachable from the kiosk grid, never during an active stream, so opening it cannot affect a running Moonlight session.
+
+Clicking the backdrop or the "Close" button dismisses the dialog and resets to the default visitor tab. The dialog does not block the stream-start path — `helpVisible` is a local property of `KioskView.qml` and is unrelated to stream state.
 
 The QR code images are pre-generated SVG files embedded as Qt resources (`res/qr_issue.svg` and `res/qr_phone.svg`). To change the URL or phone number, regenerate the SVGs:
 
@@ -143,9 +152,9 @@ Also update the fallback phone number text in `KioskView.qml` (`"Scan to call fo
 
 A subtle handle is visible at the top centre of the screen both during
 an active stream and on the experience library (kiosk grid). Tapping
-it opens a dropdown with "Exit experience" as the primary item, and a
-smaller secondary row below it with two operator tools: **Diagnostics**
-and **Logs**.
+it opens a dropdown with a single item: **Exit experience**. Operator
+tools (Diagnostics and Logs) live in the **? help dialog** on the kiosk
+grid, not in this overlay — see "Help button (kiosk header)" above.
 
 **Implementation:** as of v6.1.10 the handle + dropdown are implemented
 as a frameless, always-on-top Qt Quick window (`app/gui/StreamOverlay.qml`)
@@ -173,15 +182,6 @@ cleanup once the QML overlay is proven out. Behaviour:
   the screen. Present throughout the stream and on the kiosk grid so
   the exit gesture is discoverable.
 - **Tap / click the handle:** toggles the dropdown. No disconnect yet.
-- **Diagnostics (secondary row):** opens a panel showing the 5-check
-  connectivity suite (cluster, catalog, body available, body reachable,
-  WireGuard routing). Calls `GET http://127.0.0.1:9740/api/v1/diagnostics`
-  on the hydraheadflatscreen agent. Requires v2.0.69+. A ← Back button
-  and a Re-run button are shown in the panel header.
-- **Logs (secondary row):** opens a scrollable panel of the last 500
-  in-memory log entries with timestamps. Calls
-  `GET http://127.0.0.1:9740/api/v1/logs`. Requires v2.0.69+. Newest
-  entries scroll to the bottom automatically.
 - **Tap / click "Exit experience":** triggers a clean disconnect. As of
   v6.1.25 the overlay also briefly expands to fullscreen with a black
   "Quitting experience" veil during the disconnect to cover the macOS
