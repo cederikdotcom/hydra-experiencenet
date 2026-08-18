@@ -136,6 +136,8 @@ A "?" button sits in the top-right of the kiosk header (after the venue badge). 
 - **Logs panel:** fetches the last 500 in-memory log entries from `GET http://127.0.0.1:9740/api/v1/logs`. Requires v2.0.69+. Monospace, timestamp-prefixed, auto-scrolled to newest. A ← Back button returns to the main help view.
 - **Create issue:** fetches fresh diagnostics and the last 50 log entries, then POSTs a structured report to `https://issues.experiencenet.com/report` (project `hydraheadflatscreen`). Shows a spinner while in-flight, then displays the filed issue URL in green or an error in red. State resets on dialog close. This is the same format as `hydraheadflatscreen diagnostics --file-issue` on the CLI.
 
+**Agent version line:** opening the dialog fetches `GET http://127.0.0.1:9740/api/v1/version` (hydraheadflatscreen v2.2.3+, issue #498) and shows the agent version as a muted "Agent vX.Y.Z" line below the Close button. This complements the Qt app version already shown under the brand in the kiosk header. If the fetch fails (older agent, agent down) the line is hidden; no error is shown.
+
 The ? dialog is only reachable from the kiosk grid, never during an active stream, so opening it cannot affect a running Moonlight session.
 
 Clicking the backdrop or the "Close" button dismisses the dialog and resets to the default visitor tab. The dialog does not block the stream-start path — `helpVisible` is a local property of `KioskView.qml` and is unrelated to stream state.

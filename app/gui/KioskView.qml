@@ -24,6 +24,7 @@ Item {
     property bool filingIssue: false
     property string issueFiledUrl: ""
     property string issueFilingError: ""
+    property string agentVersion: ""
 
     StackView.onActivated: {
         toolBar.visible = false
@@ -153,6 +154,20 @@ Item {
             }
         }
         xhr.open("GET", "http://127.0.0.1:9740/api/v1/diagnostics")
+        xhr.send()
+    }
+
+    // Fetches the hydraheadflatscreen agent version for the help dialog.
+    // On failure the property stays empty and the dialog shows no agent line.
+    function fetchAgentVersion() {
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                var data = JSON.parse(xhr.responseText)
+                if (data.version) agentVersion = data.version
+            }
+        }
+        xhr.open("GET", "http://127.0.0.1:9740/api/v1/version")
         xhr.send()
     }
 
@@ -427,7 +442,10 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: kioskRoot.helpVisible = true
+                    onClicked: {
+                        kioskRoot.helpVisible = true
+                        fetchAgentVersion()
+                    }
                 }
             }
         }
@@ -882,6 +900,15 @@ Item {
                                 issueFilingError = ""
                             }
                         }
+                    }
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: agentVersion !== ""
+                        text: qsTr("Agent ") + agentVersion
+                        color: "#52525b"
+                        font.pixelSize: 11
+                        font.family: ""
                     }
                 }
 
