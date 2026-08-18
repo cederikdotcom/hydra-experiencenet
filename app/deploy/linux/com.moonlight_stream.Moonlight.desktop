@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=Moonlight
 Comment=Stream games and other applications from another PC running Sunshine or GeForce Experience
-Exec=moonlight
+Exec=hydra-experiencenet
 Icon=moonlight
 Terminal=false
 Type=Application
