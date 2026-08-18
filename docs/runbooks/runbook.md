@@ -353,3 +353,21 @@ Conflicts should be minimal — limited to `main.cpp` (new case in switch), `com
 | Stream doesn't start | Check Sunshine logs on the body machine |
 | Screenshot returns 403 | Screen recording permission not granted. Reset with `tccutil reset ScreenCapture` and relaunch kiosk |
 | Screenshot returns 502 | Qt app local server on :9741 not running. Check if kiosk app is running |
+
+## Linux build (AppImage for omarchy kiosk heads)
+
+Linux heads run the fork as an AppImage installed by the hydraheadflatscreen agent to `~/.hydraheadflatscreen/bin/hydra-experiencenet`. The artifact name the agent fetches is `HydraExperienceNet-v<X.Y.Z>-linux-x86_64.AppImage` under `releases.experiencenet.com/hydraexperiencenet/production/v<X.Y.Z>/`.
+
+### CI
+
+`.github/workflows/appimage.yml` builds and publishes it. Triggers: every `v*` tag (rides along with the DMG release), and `workflow_dispatch` with a `version` input to backfill an existing release version WITHOUT a new tag (no macOS fleet impact). The job builds SDL3, sdl2-compat, and SDL_ttf from source (distro SDL2 headers break the build, see below), uses Qt via install-qt-action, and packages with linuxdeploy plus its qt plugin. linuxdeployqt is dead: its continuous build exits silently after the icon stage (upstream issue 441); `scripts/build-appimage.sh` prefers linuxdeploy and keeps linuxdeployqt only as a local fallback.
+
+### Portability constraints learned the hard way (v6.1.37 backfill, 2026-08-18)
+
+- `SDL_syswm.h` on X11 pulls in `Xlib.h`, whose `None`/`Bool` macros break any Qt header parsed after it. Include it AFTER all Qt-including headers (see abstouch.cpp and streamutils.cpp). macOS never catches this.
+- Q_OBJECT headers used cross-platform must live in the common HEADERS list in app.pro, not the macx block, or moc never runs on Linux (kioskbridge.h regression).
+- The Linux desktop file Exec must say `hydra-experiencenet` (the unix TARGET), not `moonlight`. The app-id stays `com.moonlight_stream.Moonlight` (set in code), which omarchy's fullscreen window rule matches.
+
+### Runtime
+
+Launch with `QT_QPA_PLATFORM=xcb` (XWayland): the validated path on Hyprland; native Wayland has known upstream issues. The kiosk subcommand and the local API on 9741 behave as on macOS. The help dialog shows the agent version fetched from the agent's `GET /api/v1/version` (agent v2.2.3+).
