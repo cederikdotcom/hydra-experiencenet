@@ -76,18 +76,29 @@ if command -v linuxdeploy >/dev/null 2>&1; then
   if [ -f /usr/local/lib/libSDL3.so.0 ]; then
     DEPLOY_LIB_ARGS="--library /usr/local/lib/libSDL3.so.0"
   fi
+  # libva must come from the host, never the AppImage: libva dlopens the
+  # host's VAAPI driver and only probes __vaDriverInit_1_<minor> up to its
+  # own minor version, so a bundled (older) libva cannot load a driver
+  # built against a newer host libva and hardware decode fails (issue #500).
   QMAKE=qmake6 QML_SOURCES_PATHS=$SOURCE_ROOT/app/gui VERSION=$VERSION \
     linuxdeploy --appdir $DEPLOY_FOLDER \
     -d $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
     -i $DEPLOY_FOLDER/usr/share/icons/hicolor/scalable/apps/moonlight.svg \
+    --exclude-library "libva.so*" \
+    --exclude-library "libva-drm.so*" \
+    --exclude-library "libva-x11.so*" \
+    --exclude-library "libva-glx.so*" \
+    --exclude-library "libva-wayland.so*" \
     $DEPLOY_LIB_ARGS --plugin qt --output appimage || fail "linuxdeploy failed!"
 else
   # LINUXDEPLOYQT_EXTRA_ARGS lets CI pass flags like
   # -unsupported-allow-new-glibc when building on a newer base image than
   # linuxdeployqt's oldest-supported-LTS policy expects. Our AppImage only
   # targets omarchy heads (rolling glibc), so a new build base is fine.
+  # Same libva exclusion as the linuxdeploy path above (issue #500).
   VERSION=$VERSION linuxdeployqt $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
     -qmake=qmake6 -qmldir=$SOURCE_ROOT/app/gui -appimage -extra-plugins=tls \
+    -exclude-libs=libva.so.2,libva-drm.so.2,libva-x11.so.2,libva-glx.so.2,libva-wayland.so.2 \
     $SDL3_ARGS $LINUXDEPLOYQT_EXTRA_ARGS || fail "linuxdeployqt failed!"
 fi
 popd
