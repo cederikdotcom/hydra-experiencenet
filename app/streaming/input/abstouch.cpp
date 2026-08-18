@@ -2,11 +2,15 @@
 
 #include <Limelight.h>
 #include "SDL_compat.h"
-#include <SDL_syswm.h>
 #include "streaming/session.h"
 #include "streaming/streamutils.h"
 
 #include <QtMath>
+
+// Included after all Qt-including headers: on Linux SDL_syswm.h pulls in
+// X11/Xlib.h, whose None/Bool macros break Qt headers parsed after it
+// (same ordering streamutils.cpp uses).
+#include <SDL_syswm.h>
 
 // Height of the top strip in window-space pixels that summons the exit
 // overlay back on a finger tap when it has auto-hidden. Matches the
