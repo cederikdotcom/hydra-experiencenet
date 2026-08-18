@@ -222,6 +222,7 @@ HEADERS += \
     cli/startstream.h \
     cli/kiosklauncher.h \
     api/localserver.h \
+    platform/kioskbridge.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/session.h \
@@ -407,8 +408,7 @@ macx {
 
     HEADERS += \
         streaming/video/ffmpeg-renderers/vt.h \
-        platform/macos_permissions.h \
-        platform/kioskbridge.h
+        platform/macos_permissions.h
 }
 discord-rpc {
     message(Discord integration enabled)
