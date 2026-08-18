@@ -54,13 +54,41 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
-            build-essential pkg-config \
+            build-essential pkg-config cmake \
             libegl1-mesa-dev libgl1-mesa-dev libxkbcommon-dev \
             libssl-dev libopus-dev \
-            libsdl2-dev libsdl2-ttf-dev \
+            libfreetype-dev libharfbuzz-dev \
             libavcodec-dev libavutil-dev libswscale-dev \
             libva-dev libvdpau-dev libdrm-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxfixes-dev libxss-dev libpipewire-0.3-dev \
+            libpulse-dev libasound2-dev libudev-dev libdbus-1-dev \
             libfuse2
+
+      # Distro SDL2 is unusable here: its SDL_syswm.h includes X11/Xlib.h,
+      # whose macros (None, Type) break Qt headers in any file that includes
+      # SDL before Qt (abstouch.cpp). Upstream builds SDL3 + sdl2-compat from
+      # source, whose compat SDL_syswm.h has no X11 include; mirror that,
+      # plus SDL_ttf against the compat SDL2.
+      - name: Build SDL3, sdl2-compat, SDL_ttf from source
+        run: |
+          git clone --depth 1 --branch release-3.2.x https://github.com/libsdl-org/SDL.git /tmp/SDL3
+          cmake -S /tmp/SDL3 -B /tmp/SDL3/build -DCMAKE_BUILD_TYPE=Release -DSDL_STATIC=OFF
+          cmake --build /tmp/SDL3/build -j$(nproc)
+          sudo cmake --install /tmp/SDL3/build
+
+          git clone --depth 1 --branch release-2.32.x https://github.com/libsdl-org/sdl2-compat.git /tmp/sdl2-compat
+          cmake -S /tmp/sdl2-compat -B /tmp/sdl2-compat/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/sdl2-compat/build -j$(nproc)
+          sudo cmake --install /tmp/sdl2-compat/build
+
+          git clone --depth 1 --branch release-2.24.x https://github.com/libsdl-org/SDL_ttf.git /tmp/SDL_ttf
+          cmake -S /tmp/SDL_ttf -B /tmp/SDL_ttf/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/SDL_ttf/build -j$(nproc)
+          sudo cmake --install /tmp/SDL_ttf/build
+
+          sudo ldconfig
+          echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
