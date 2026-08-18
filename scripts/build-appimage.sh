@@ -19,7 +19,9 @@ else
 fi
 
 command -v qmake6 >/dev/null 2>&1 || fail "Unable to find 'qmake6' in your PATH!"
-command -v linuxdeployqt >/dev/null 2>&1 || fail "Unable to find 'linuxdeployqt' in your PATH!"
+if ! command -v linuxdeploy >/dev/null 2>&1 && ! command -v linuxdeployqt >/dev/null 2>&1; then
+  fail "Unable to find 'linuxdeploy' or 'linuxdeployqt' in your PATH!"
+fi
 
 echo Cleaning output directories
 rm -rf $BUILD_FOLDER
@@ -66,13 +68,28 @@ fi
 
 echo Creating AppImage
 pushd $INSTALLER_FOLDER
-# LINUXDEPLOYQT_EXTRA_ARGS lets CI pass flags like
-# -unsupported-allow-new-glibc when building on a newer base image than
-# linuxdeployqt's oldest-supported-LTS policy expects. Our AppImage only
-# targets omarchy heads (rolling glibc), so a new build base is fine.
-VERSION=$VERSION linuxdeployqt $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
-  -qmake=qmake6 -qmldir=$SOURCE_ROOT/app/gui -appimage -extra-plugins=tls \
-  $SDL3_ARGS $LINUXDEPLOYQT_EXTRA_ARGS || fail "linuxdeployqt failed!"
+if command -v linuxdeploy >/dev/null 2>&1; then
+  # Preferred: linuxdeploy with the qt plugin (linuxdeployqt's maintained
+  # successor; linuxdeployqt's continuous build dies silently after the
+  # icon stage on current runners).
+  DEPLOY_LIB_ARGS=""
+  if [ -f /usr/local/lib/libSDL3.so.0 ]; then
+    DEPLOY_LIB_ARGS="--library /usr/local/lib/libSDL3.so.0"
+  fi
+  QMAKE=qmake6 QML_SOURCES_PATHS=$SOURCE_ROOT/app/gui VERSION=$VERSION \
+    linuxdeploy --appdir $DEPLOY_FOLDER \
+    -d $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
+    -i $DEPLOY_FOLDER/usr/share/icons/hicolor/scalable/apps/moonlight.svg \
+    $DEPLOY_LIB_ARGS --plugin qt --output appimage || fail "linuxdeploy failed!"
+else
+  # LINUXDEPLOYQT_EXTRA_ARGS lets CI pass flags like
+  # -unsupported-allow-new-glibc when building on a newer base image than
+  # linuxdeployqt's oldest-supported-LTS policy expects. Our AppImage only
+  # targets omarchy heads (rolling glibc), so a new build base is fine.
+  VERSION=$VERSION linuxdeployqt $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
+    -qmake=qmake6 -qmldir=$SOURCE_ROOT/app/gui -appimage -extra-plugins=tls \
+    $SDL3_ARGS $LINUXDEPLOYQT_EXTRA_ARGS || fail "linuxdeployqt failed!"
+fi
 popd
 
 echo Build successful

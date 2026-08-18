@@ -97,11 +97,13 @@ jobs:
           version: '6.10.2'
           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5'
 
-      - name: Install linuxdeployqt
+      - name: Install linuxdeploy and its qt plugin
         run: |
-          sudo curl -fsSL -o /usr/local/bin/linuxdeployqt \
-            https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
-          sudo chmod +x /usr/local/bin/linuxdeployqt
+          sudo curl -fsSL -o /usr/local/bin/linuxdeploy \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          sudo curl -fsSL -o /usr/local/bin/linuxdeploy-plugin-qt \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          sudo chmod +x /usr/local/bin/linuxdeploy /usr/local/bin/linuxdeploy-plugin-qt
 
       - name: Build AppImage
         env:
