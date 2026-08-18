@@ -367,6 +367,7 @@ Linux heads run the fork as an AppImage installed by the hydraheadflatscreen age
 - `SDL_syswm.h` on X11 pulls in `Xlib.h`, whose `None`/`Bool` macros break any Qt header parsed after it. Include it AFTER all Qt-including headers (see abstouch.cpp and streamutils.cpp). macOS never catches this.
 - Q_OBJECT headers used cross-platform must live in the common HEADERS list in app.pro, not the macx block, or moc never runs on Linux (kioskbridge.h regression).
 - The Linux desktop file Exec must say `hydra-experiencenet` (the unix TARGET), not `moonlight`. The app-id stays `com.moonlight_stream.Moonlight` (set in code), which omarchy's fullscreen window rule matches.
+- Never bundle libva: it dlopens the host's VAAPI driver and only probes `__vaDriverInit_1_<minor>` up to its own minor version, so a bundled (older) libva cannot load a newer host driver and hardware decode dies (issue #500). The build excludes the libva family so the host copy loads.
 
 ### Runtime
 
