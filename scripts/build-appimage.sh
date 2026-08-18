@@ -54,15 +54,25 @@ popd
 
 # We need to manually place SDL3 in our AppImage, since linuxdeployqt
 # cannot see the dependency via ldd when it looks at SDL2-compat.
-echo Staging SDL3 library
-mkdir -p $DEPLOY_FOLDER/usr/lib
-cp /usr/local/lib/libSDL3.so.0 $DEPLOY_FOLDER/usr/lib/
+# Skipped when building against a plain distro SDL2 (no sdl2-compat),
+# where no separate SDL3 library exists.
+SDL3_ARGS=""
+if [ -f /usr/local/lib/libSDL3.so.0 ]; then
+  echo Staging SDL3 library
+  mkdir -p $DEPLOY_FOLDER/usr/lib
+  cp /usr/local/lib/libSDL3.so.0 $DEPLOY_FOLDER/usr/lib/
+  SDL3_ARGS="-executable=$DEPLOY_FOLDER/usr/lib/libSDL3.so.0"
+fi
 
 echo Creating AppImage
 pushd $INSTALLER_FOLDER
+# LINUXDEPLOYQT_EXTRA_ARGS lets CI pass flags like
+# -unsupported-allow-new-glibc when building on a newer base image than
+# linuxdeployqt's oldest-supported-LTS policy expects. Our AppImage only
+# targets omarchy heads (rolling glibc), so a new build base is fine.
 VERSION=$VERSION linuxdeployqt $DEPLOY_FOLDER/usr/share/applications/com.moonlight_stream.Moonlight.desktop \
   -qmake=qmake6 -qmldir=$SOURCE_ROOT/app/gui -appimage -extra-plugins=tls \
-  -executable=$DEPLOY_FOLDER/usr/lib/libSDL3.so.0 || fail "linuxdeployqt failed!"
+  $SDL3_ARGS $LINUXDEPLOYQT_EXTRA_ARGS || fail "linuxdeployqt failed!"
 popd
 
 echo Build successful

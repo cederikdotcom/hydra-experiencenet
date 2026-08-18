@@ -1,0 +1,110 @@
+name: Linux AppImage
+
+# Builds the Linux AppImage for hydraheadflatscreen kiosk heads (omarchy)
+# and publishes it to the release server next to the DMG, under the name
+# the agent's QtAppUpdater expects:
+#   HydraExperienceNet-v<X.Y.Z>-linux-x86_64.AppImage
+#
+# Triggers:
+# - tags: every release gets a Linux artifact alongside the DMG
+# - workflow_dispatch: backfill an existing release version without a new
+#   tag (no macOS fleet impact)
+# - a push touching this workflow file (first-run bootstrap)
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - master
+    paths:
+      - '.github/workflows/appimage.yml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to build and publish (bare SemVer, e.g. 6.1.37)'
+        required: true
+        default: '6.1.37'
+
+jobs:
+  appimage:
+    name: Build Linux AppImage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            # Bootstrap push: backfill the latest published release, not the
+            # stale in-tree version.txt (CI normally overwrites that file).
+            VERSION=$(curl -fsSL "https://releases.experiencenet.com/hydraexperiencenet/production/latest.json" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building version $VERSION"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            build-essential pkg-config \
+            libegl1-mesa-dev libgl1-mesa-dev libxkbcommon-dev \
+            libssl-dev libopus-dev \
+            libsdl2-dev libsdl2-ttf-dev \
+            libavcodec-dev libavutil-dev libswscale-dev \
+            libva-dev libvdpau-dev libdrm-dev \
+            libfuse2
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          version: '6.10.2'
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5'
+
+      - name: Install linuxdeployqt
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/linuxdeployqt \
+            https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
+          sudo chmod +x /usr/local/bin/linuxdeployqt
+
+      - name: Build AppImage
+        env:
+          CI_VERSION: ${{ steps.ver.outputs.version }}
+          LINUXDEPLOYQT_EXTRA_ARGS: '-unsupported-allow-new-glibc'
+        run: |
+          echo "$CI_VERSION" > app/version.txt
+          bash scripts/build-appimage.sh
+
+      - name: Publish to release server
+        env:
+          HYDRARELEASE_TOKEN: ${{ secrets.HYDRARELEASE_PUBLISH_TOKEN }}
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          SERVER="https://releases.experiencenet.com"
+          PROJECT="hydraexperiencenet"
+          CHANNEL="production"
+          NAME="HydraExperienceNet-v${VERSION}-linux-x86_64.AppImage"
+
+          SRC=$(find build/installer-release -name '*.AppImage' | head -1)
+          [ -n "$SRC" ] || { echo "no AppImage produced" >&2; exit 1; }
+          cp "$SRC" "$NAME"
+          ls -la "$NAME"
+
+          curl -sf -X POST \
+            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary @"$NAME" \
+            "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/v$VERSION/$NAME"
+
+          curl -sf -X POST \
+            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+            "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/v$VERSION/finalize"
+          echo "published $NAME to $PROJECT/$CHANNEL/v$VERSION"
