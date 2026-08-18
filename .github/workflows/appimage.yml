@@ -106,7 +106,7 @@ jobs:
       - name: Build AppImage
         env:
           CI_VERSION: ${{ steps.ver.outputs.version }}
-          LINUXDEPLOYQT_EXTRA_ARGS: '-unsupported-allow-new-glibc'
+          LINUXDEPLOYQT_EXTRA_ARGS: '-unsupported-allow-new-glibc -verbose=2'
         run: |
           echo "$CI_VERSION" > app/version.txt
           bash scripts/build-appimage.sh
