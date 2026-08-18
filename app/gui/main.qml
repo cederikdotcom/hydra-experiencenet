@@ -22,6 +22,14 @@ ApplicationWindow {
     width: 1280
     height: 600
 
+    // Closing the main window ends the whole app. Without this, a
+    // compositor-initiated close (Hyprland Super+W) tears down only this
+    // surface while the floating exit-overlay Window keeps the process
+    // alive, leaving an orphaned overlay on screen. hide() flows (the
+    // kiosk hide/show cycle around streams) do not emit closing, so the
+    // agent-driven choreography is unaffected.
+    onClosing: Qt.quit()
+
     // When launched as a kiosk we drop the macOS window chrome
     // (title bar, traffic lights). Must be set at declaration
     // time: changing flags after the window is already visible
