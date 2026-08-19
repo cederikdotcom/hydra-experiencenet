@@ -1405,8 +1405,17 @@ bool FFmpegVideoDecoder::tryInitializeRendererForUnknownDecoder(const AVCodec* d
         }
 #endif
 
+        // Scene mode (issue #507): this unknown-decoder path constructs its
+        // frontend directly, bypassing createFrontendRenderer's scene
+        // branch; without this gate software decoders pair with SdlRenderer
+        // (which needs a window) and scene-mode creation fails entirely.
         if (tryInitializeRenderer(decoder, AV_PIX_FMT_NONE, params, nullptr, nullptr,
-                                  []() -> IFFmpegRenderer* { return new SdlRenderer(); })) {
+                                  [params]() -> IFFmpegRenderer* {
+                                      if (params->sceneMode) {
+                                          return new QuickSinkRenderer();
+                                      }
+                                      return new SdlRenderer();
+                                  })) {
             return true;
         }
 
