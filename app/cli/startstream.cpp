@@ -84,6 +84,14 @@ public:
                     m_Computer = event.computer;
                     m_TimeoutTimer->start(APP_SEEK_TIMEOUT);
                     emit q->searchingApp();
+                    // Check the app list immediately: in a warm process
+                    // (kiosk in-process streams, issue #507) the list can
+                    // already be populated with no further state change
+                    // coming, and waiting only for computerStateChanged
+                    // events then times out on an app that is present.
+                    Event initialCheck(Event::ComputerUpdated);
+                    initialCheck.computer = event.computer;
+                    handleEvent(initialCheck);
                 } else {
                     m_State = StateFailure;
                     QString msg = QObject::tr("Computer %1 has not been paired. "
