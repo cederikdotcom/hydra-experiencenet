@@ -44,8 +44,17 @@ void ComputerSeeker::start(int timeout)
         const auto computers = m_ComputerManager->getComputers();
         for (NvComputer* computer : computers) {
             if (matchComputer(computer) && isOnline(computer)) {
-                m_ComputerManager->stopPollingAsync();
                 m_TimeoutTimer->stop();
+                // Do not stop polling yet: consumers like CliStartStream
+                // wait passively for computerStateChanged to carry the app
+                // list, which only a poll round delivers. The event-driven
+                // path gets that round for free (its stopPollingAsync lets
+                // the in-flight round finish); the warm path has no round
+                // in flight, so grant one before releasing the ref.
+                ComputerManager* manager = m_ComputerManager;
+                QTimer::singleShot(5000, manager, [manager]() {
+                    manager->stopPollingAsync();
+                });
                 emit computerFound(computer);
                 return;
             }
