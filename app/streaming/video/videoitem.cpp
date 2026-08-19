@@ -1279,19 +1279,18 @@ void VideoItem::setStreamActive(bool active)
 
     m_StreamActive = active;
 
-    if (active) {
-        // Review finding 1: exactly one cursor visible during a stream,
-        // the host's. Items stacked above (the exit control) restore a
-        // visible cursor over their own area via cursorShape.
-        setCursor(Qt::BlankCursor);
-    }
-    else {
-        unsetCursor();
-
+    if (!active) {
         // Raise all keys and cancel active pointers so nothing sticks on
         // the host across a stream end or a page pop
         m_InputHandler->deactivate();
     }
+    // Cursor policy (owner feedback, 2026-08-19): never blank. In the
+    // everything-as-touch model the host renders no pointer for touch
+    // input, so the local cursor is the ONLY one and hiding it leaves
+    // trackpad users pointing blind at precise targets. Real touchscreens
+    // never show a cursor anyway (nothing moves it), so exactly one
+    // cursor stays visible in every input mode. Review finding 1 (double
+    // cursor) applied to the retired mouse-forwarding model.
 
     emit streamActiveChanged();
 }
