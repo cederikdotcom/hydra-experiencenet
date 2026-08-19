@@ -2,6 +2,11 @@
 
 #include "streaming/video/quicksinkbridge.h"
 #include "streaming/video/ffmpeg-renderers/renderer.h"
+#include "streaming/video/ffmpeg-renderers/quicksink.h"
+
+extern "C" {
+#include <libavutil/hwcontext.h>
+}
 
 #include <QSGRenderNode>
 #include <QOpenGLContext>
@@ -27,7 +32,44 @@
 #define GL_UNPACK_ROW_LENGTH 0x0CF2
 #endif
 
+#ifdef HAVE_EGL
+// glEGLImageTargetTexture2DOES() from GL_OES_EGL_image. We declare our own
+// function pointer type instead of including SDL_opengles2.h, which does not
+// mix safely with Qt's OpenGL headers in the same translation unit.
+typedef void (EGLAPIENTRYP PfnGlEGLImageTargetTexture2DOES)(GLenum target, EGLImage image);
+
+// DRM format constants for the per-plane import of composed NV12 dmabufs
+// (issue #507 M0 amendment). Defined locally so we don't take a dependency
+// on libdrm headers, following eglimagefactory.cpp.
+#ifndef DRM_FORMAT_MOD_INVALID
+#define DRM_FORMAT_MOD_INVALID ((1ULL << 56) - 1)
+#endif
+#ifndef DRM_FORMAT_MOD_LINEAR
+#define DRM_FORMAT_MOD_LINEAR 0
+#endif
+#ifndef fourcc_code
+#define fourcc_code(a, b, c, d) ((uint32_t)(a) | ((uint32_t)(b) << 8) | ((uint32_t)(c) << 16) | ((uint32_t)(d) << 24))
+#endif
+#ifndef DRM_FORMAT_R8
+#define DRM_FORMAT_R8 fourcc_code('R', '8', ' ', ' ')
+#endif
+#ifndef DRM_FORMAT_GR88
+#define DRM_FORMAT_GR88 fourcc_code('G', 'R', '8', '8')
+#endif
+#ifndef DRM_FORMAT_NV12
+#define DRM_FORMAT_NV12 fourcc_code('N', 'V', '1', '2')
+#endif
+#endif
+
 namespace {
+
+#ifdef HAVE_EGL
+// Bounded client-wait on the frame retirement fence. Long enough for any
+// realistic frame on this hardware, short enough that a wedged GPU cannot
+// hang the GUI thread. On timeout we proceed; the worst case is a transient
+// artifact on a frame that was already multiple vsyncs late.
+const EGLTime k_FenceTimeoutNs = 100000000ull; // 100 ms
+#endif
 
 // Minimal IFFmpegRenderer implementation used only to reuse the shared CSC
 // constant math from renderer.h (getFramePremultipliedCscConstants) without
@@ -176,19 +218,37 @@ public:
         QOpenGLFunctions* f = ctx->functions();
 
         // Latch the newest frame delivered by the VideoItem. The previous
-        // frame is freed only after the new upload has completed.
+        // frame is freed only after the new frame's texture content is in
+        // place (upload completed, or imported images bound after the
+        // retirement fence for the previous frame signaled).
         if (m_PendingFrame != nullptr) {
-            if (uploadFrame(ctx, f, m_PendingFrame)) {
-                av_frame_free(&m_CurrentFrame);
-                m_CurrentFrame = m_PendingFrame;
-                m_PendingFrame = nullptr;
+            AVFrame* frame = m_PendingFrame;
+            m_PendingFrame = nullptr;
+
+#ifdef HAVE_EGL
+            if (frame->format == AV_PIX_FMT_VAAPI) {
+                latchVaapiFrame(ctx, f, frame);
             }
-            else {
-                av_frame_free(&m_PendingFrame);
+            else
+#endif
+            {
+                latchUploadedFrame(ctx, f, frame);
             }
         }
 
-        if (m_Program == 0 || m_TextureCount == 0 || m_TexWidth == 0 || m_TexHeight == 0) {
+        // Select the texture set for the active path. The import path and
+        // the M1 upload path keep separate texture objects so a mid-stream
+        // fallback never draws with half-switched texture state.
+        const GLuint* textures = m_Textures;
+        int textureCount = m_TextureCount;
+#ifdef HAVE_EGL
+        if (m_ImportActive) {
+            textures = m_ImportTextures;
+            textureCount = m_ImportTextureCount;
+        }
+#endif
+
+        if (m_Program == 0 || textureCount == 0 || m_TexWidth == 0 || m_TexHeight == 0) {
             return;
         }
 
@@ -279,16 +339,35 @@ public:
         f->glUniform3fv(m_LocOffsets, 1, m_YuvOffsets.data());
         f->glUniform1f(m_LocAlpha, alpha);
 
-        for (int i = 0; i < m_TextureCount; i++) {
+        for (int i = 0; i < textureCount; i++) {
             f->glActiveTexture(GL_TEXTURE0 + i);
-            f->glBindTexture(GL_TEXTURE_2D, m_Textures[i]);
+            f->glBindTexture(GL_TEXTURE_2D, textures[i]);
         }
 
         f->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
+#ifdef HAVE_EGL
+        // Fence the draw so the imported frame's dmabuf is not released
+        // back to the decoder while the GPU may still be reading it. The
+        // fence is consumed (client-waited) before the frame retires.
+        // Mirrors eglvid.cpp's m_LastRenderSync pattern.
+        if (m_ImportActive && m_eglClientWaitSync != nullptr) {
+            if (m_LastRenderSync != EGL_NO_SYNC) {
+                // Superseded: the new fence covers strictly more commands
+                m_eglDestroySync(m_EGLDisplay, m_LastRenderSync);
+            }
+            if (m_eglCreateSync != nullptr) {
+                m_LastRenderSync = m_eglCreateSync(m_EGLDisplay, EGL_SYNC_FENCE, nullptr);
+            }
+            else {
+                m_LastRenderSync = m_eglCreateSyncKHR(m_EGLDisplay, EGL_SYNC_FENCE, nullptr);
+            }
+        }
+#endif
+
         // Unbind everything we bound so no stale bindings leak into the
         // scene graph's own rendering
-        for (int i = m_TextureCount - 1; i >= 0; i--) {
+        for (int i = textureCount - 1; i >= 0; i--) {
             f->glActiveTexture(GL_TEXTURE0 + i);
             f->glBindTexture(GL_TEXTURE_2D, 0);
         }
@@ -304,6 +383,523 @@ public:
     }
 
 private:
+    // Uploads the frame (software copy path, exactly as M1) and makes it
+    // current on success. Takes ownership of the frame in all cases.
+    void latchUploadedFrame(QOpenGLContext* ctx, QOpenGLFunctions* f, AVFrame* frame)
+    {
+        if (uploadFrame(ctx, f, frame)) {
+            retireCurrentFrame(f);
+            m_CurrentFrame = frame;
+#ifdef HAVE_EGL
+            m_ImportActive = false;
+#endif
+        }
+        else {
+            av_frame_free(&frame);
+        }
+    }
+
+    // Frees the current frame. If it was rendered from imported EGLImages,
+    // first waits until the GPU is done with them, because av_frame_free()
+    // destroys the images (EglImageContext chained on frame->opaque_ref)
+    // and releases the dmabuf surface back to the decoder.
+    void retireCurrentFrame(QOpenGLFunctions* f)
+    {
+#ifdef HAVE_EGL
+        if (m_ImportActive) {
+            waitAndDestroyRenderFence(f);
+        }
+        destroyOwnedImages();
+#else
+        Q_UNUSED(f);
+#endif
+        av_frame_free(&m_CurrentFrame);
+    }
+
+#ifdef HAVE_EGL
+    // Client-waits (bounded) on the fence created after the last draw that
+    // sampled imported images, then destroys it. Without fence support the
+    // degraded path is a full glFinish(), same as eglvid.cpp.
+    void waitAndDestroyRenderFence(QOpenGLFunctions* f)
+    {
+        if (m_eglClientWaitSync != nullptr) {
+            if (m_LastRenderSync != EGL_NO_SYNC) {
+                m_eglClientWaitSync(m_EGLDisplay, m_LastRenderSync,
+                                    EGL_SYNC_FLUSH_COMMANDS_BIT, k_FenceTimeoutNs);
+                m_eglDestroySync(m_EGLDisplay, m_LastRenderSync);
+                m_LastRenderSync = EGL_NO_SYNC;
+            }
+        }
+        else if (f != nullptr) {
+            f->glFinish();
+        }
+    }
+
+    // Handles an AV_PIX_FMT_VAAPI frame per the issue #507 M2 contract:
+    // zero-copy import when possible; on ANY import failure, log once, flip
+    // the bridge to software readback for the rest of the session, and
+    // transfer THIS frame as a one-off so the stream does not glitch.
+    // Takes ownership of the frame in all cases.
+    void latchVaapiFrame(QOpenGLContext* ctx, QOpenGLFunctions* f, AVFrame* frame)
+    {
+        // A hardware frame arriving while the bridge preference is back at
+        // false means a new session started (QuickSinkBridge::enable()
+        // resets it), so give zero copy a fresh chance.
+        if (m_ImportDisabled && !QuickSinkBridge::instance()->preferSoftware()) {
+            m_ImportDisabled = false;
+            m_FallbackLogged = false;
+            m_ZeroCopyLogged = false;
+        }
+
+        if (!m_ImportDisabled && tryImportFrame(ctx, f, frame)) {
+            return;
+        }
+
+        engageSoftwareFallback();
+
+        // One-off readback on the GUI thread. Frames already in flight on
+        // the hardware path keep taking this until the decoder side sees
+        // the preference; after that all frames arrive as software frames
+        // and render exactly as M1.
+        AVFrame* swFrame = av_frame_alloc();
+        if (swFrame == nullptr) {
+            av_frame_free(&frame);
+            return;
+        }
+
+        int err = av_hwframe_transfer_data(swFrame, frame, 0);
+        if (err < 0) {
+            if (!m_LoggedUploadError) {
+                m_LoggedUploadError = true;
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                             "VideoItem: av_hwframe_transfer_data() failed: %d",
+                             err);
+            }
+            av_frame_free(&swFrame);
+            av_frame_free(&frame);
+            return;
+        }
+
+        // av_hwframe_transfer_data() doesn't transfer metadata, and the
+        // CSC constants depend on it
+        av_frame_copy_props(swFrame, frame);
+        av_frame_free(&frame);
+
+        latchUploadedFrame(ctx, f, swFrame);
+    }
+
+    void engageSoftwareFallback()
+    {
+        if (!m_FallbackLogged) {
+            m_FallbackLogged = true;
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "VideoItem: zero-copy import failed (%s), falling back to software readback",
+                        m_ImportFailReason != nullptr ? m_ImportFailReason : "unknown reason");
+        }
+        m_ImportDisabled = true;
+        QuickSinkBridge::instance()->setPreferSoftware(true);
+    }
+
+    // One-time EGL setup per backend renderer instance, mirroring the
+    // relevant parts of EGLRenderer::initialize(). Re-runs when the backend
+    // changes (mid-stream decoder reset or a new session). The backend
+    // pointer is re-fetched from QuickSinkRenderer on every pass per its
+    // contract; m_EglBackend only tracks which instance we initialized.
+    bool ensureEglSetup(QOpenGLContext* ctx)
+    {
+        IFFmpegRenderer* backend = QuickSinkRenderer::activeBackendRenderer();
+        if (backend == nullptr) {
+            m_ImportFailReason = "no backend renderer registered";
+            return false;
+        }
+
+        // The generation check catches a decoder reset that allocated the
+        // new backend at the old backend's address (ABA), which the pointer
+        // comparison alone would miss.
+        const uint64_t generation = QuickSinkRenderer::activeBackendGeneration();
+        if (backend == m_EglBackend && generation == m_EglBackendGeneration) {
+            return true;
+        }
+
+        m_EglBackend = nullptr;
+
+        m_EGLDisplay = eglGetCurrentDisplay();
+        if (m_EGLDisplay == EGL_NO_DISPLAY) {
+            m_ImportFailReason = "no current EGL display";
+            return false;
+        }
+
+        if (!ctx->hasExtension(QByteArrayLiteral("GL_OES_EGL_image"))) {
+            m_ImportFailReason = "GL_OES_EGL_image unsupported";
+            return false;
+        }
+
+        m_glEGLImageTargetTexture2DOES =
+            (PfnGlEGLImageTargetTexture2DOES)eglGetProcAddress("glEGLImageTargetTexture2DOES");
+        if (m_glEGLImageTargetTexture2DOES == nullptr) {
+            m_ImportFailReason = "glEGLImageTargetTexture2DOES not found";
+            return false;
+        }
+
+        const EGLExtensions eglExtensions(m_EGLDisplay);
+        if (!eglExtensions.isSupported("EGL_KHR_image_base") &&
+            !eglExtensions.isSupported("EGL_KHR_image")) {
+            m_ImportFailReason = "EGL_KHR_image unsupported";
+            return false;
+        }
+
+        if (!backend->canExportEGL()) {
+            m_ImportFailReason = "backend cannot export EGLImages";
+            return false;
+        }
+
+        if (!backend->initializeEGL(m_EGLDisplay, eglExtensions)) {
+            m_ImportFailReason = "backend EGL initialization failed";
+            return false;
+        }
+
+        // Determine the export shape the backend settled on. Separate-layer
+        // export yields per-plane images directly from exportEGLImages().
+        // Composed export (AV_PIX_FMT_DRM_PRIME, the only shape i965 offers
+        // per the issue #507 M0 amendment) yields one opaque image instead,
+        // so for that shape we take the raw composed dmabuf through
+        // mapDrmPrimeFrame() and import the R8 (Y) and GR88 (CbCr) planes
+        // ourselves using the descriptor's per-plane offset and pitch.
+        m_EglExportFormat = backend->getEGLImagePixelFormat();
+        if (m_EglExportFormat == AV_PIX_FMT_DRM_PRIME) {
+#ifdef HAVE_DRM
+            if (!backend->canExportDrmPrime()) {
+                m_ImportFailReason = "composed export without DRM PRIME support";
+                return false;
+            }
+
+            if (!eglExtensions.isSupported("EGL_EXT_image_dma_buf_import")) {
+                m_ImportFailReason = "EGL_EXT_image_dma_buf_import unsupported";
+                return false;
+            }
+            m_DmaBufModifiersSupported =
+                eglExtensions.isSupported("EGL_EXT_image_dma_buf_import_modifiers");
+
+            // NB: eglCreateImage() and eglCreateImageKHR() have slightly
+            // different definitions, mirroring eglimagefactory.cpp
+            m_eglCreateImage = (PFNEGLCREATEIMAGEPROC)eglGetProcAddress("eglCreateImage");
+            m_eglCreateImageKHR = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+            m_eglDestroyImage = (PFNEGLDESTROYIMAGEPROC)eglGetProcAddress("eglDestroyImage");
+            m_eglDestroyImageKHR = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+            if (!(m_eglCreateImage && m_eglDestroyImage) &&
+                !(m_eglCreateImageKHR && m_eglDestroyImageKHR)) {
+                m_ImportFailReason = "missing eglCreateImage()/eglDestroyImage()";
+                return false;
+            }
+#else
+            m_ImportFailReason = "composed export requires DRM support";
+            return false;
+#endif
+        }
+        else if (m_EglExportFormat != AV_PIX_FMT_NV12 &&
+                 m_EglExportFormat != AV_PIX_FMT_YUV420P &&
+                 m_EglExportFormat != AV_PIX_FMT_YUVJ420P) {
+            // Separate-layer shapes our 8-bit shaders cannot sample
+            // (P010 and friends are filtered out by isPixelFormatSupported,
+            // but stay defensive here)
+            m_ImportFailReason = "unsupported separate-layer export format";
+            return false;
+        }
+
+        // Fence sync is optional; without it we glFinish() before retiring
+        // frames, the same degradation eglvid.cpp accepts
+        if (eglExtensions.isSupported("EGL_KHR_fence_sync")) {
+            // eglCreateSyncKHR() has a slightly different prototype to eglCreateSync()
+            m_eglCreateSyncKHR = (PFNEGLCREATESYNCKHRPROC)eglGetProcAddress("eglCreateSyncKHR");
+            m_eglDestroySync = (PFNEGLDESTROYSYNCPROC)eglGetProcAddress("eglDestroySyncKHR");
+            m_eglClientWaitSync = (PFNEGLCLIENTWAITSYNCPROC)eglGetProcAddress("eglClientWaitSyncKHR");
+        }
+        else {
+            // EGL 1.5 introduced sync support to the core specification
+            m_eglCreateSync = (PFNEGLCREATESYNCPROC)eglGetProcAddress("eglCreateSync");
+            m_eglDestroySync = (PFNEGLDESTROYSYNCPROC)eglGetProcAddress("eglDestroySync");
+            m_eglClientWaitSync = (PFNEGLCLIENTWAITSYNCPROC)eglGetProcAddress("eglClientWaitSync");
+        }
+        if ((m_eglCreateSync == nullptr && m_eglCreateSyncKHR == nullptr) ||
+            m_eglDestroySync == nullptr || m_eglClientWaitSync == nullptr) {
+            m_eglCreateSync = nullptr;
+            m_eglCreateSyncKHR = nullptr;
+            m_eglDestroySync = nullptr;
+            m_eglClientWaitSync = nullptr;
+        }
+
+        m_EglBackend = backend;
+        m_EglBackendGeneration = generation;
+        return true;
+    }
+
+#ifdef HAVE_DRM
+    // Imports the two planes of a composed NV12 dmabuf as R8 and GR88
+    // EGLImages (issue #507 M0 amendment). The dmabuf fds are closed with
+    // the frame (mapDrmPrimeFrame chains a cleanup buffer on
+    // frame->opaque_ref); the EGLImages become ours to destroy, which the
+    // caller does through m_OwnedImages once the GPU is done sampling.
+    // Returns the plane count, or -1 with m_ImportFailReason set.
+    ssize_t importComposedPlanes(AVFrame* frame, EGLImage images[EGL_MAX_PLANES])
+    {
+        AVDRMFrameDescriptor drmDescriptor;
+        if (!m_EglBackend->mapDrmPrimeFrame(frame, &drmDescriptor)) {
+            m_ImportFailReason = "mapDrmPrimeFrame() failed";
+            return -1;
+        }
+
+        if (drmDescriptor.nb_layers != 1 ||
+            drmDescriptor.layers[0].format != DRM_FORMAT_NV12 ||
+            drmDescriptor.layers[0].nb_planes != 2) {
+            m_ImportFailReason = "composed descriptor is not two-plane NV12";
+            return -1;
+        }
+
+        const uint32_t planeFourccs[2] = { DRM_FORMAT_R8, DRM_FORMAT_GR88 };
+
+        for (int i = 0; i < 2; i++) {
+            const AVDRMPlaneDescriptor& plane = drmDescriptor.layers[0].planes[i];
+            const AVDRMObjectDescriptor& object = drmDescriptor.objects[plane.object_index];
+
+            const bool haveModifier = object.format_modifier != DRM_FORMAT_MOD_INVALID;
+            if (haveModifier &&
+                object.format_modifier != DRM_FORMAT_MOD_LINEAR &&
+                !m_DmaBufModifiersSupported) {
+                m_ImportFailReason = "tiled dmabuf without modifier import support";
+                if (i == 1) {
+                    destroyEglImage(images[0]);
+                }
+                return -1;
+            }
+
+            // NV12: full-resolution Y plane, half-resolution CbCr plane
+            const EGLAttrib planeWidth = (i == 0) ? frame->width : (frame->width + 1) / 2;
+            const EGLAttrib planeHeight = (i == 0) ? frame->height : (frame->height + 1) / 2;
+
+            const int MAX_ATTRIB_COUNT = 19;
+            EGLAttrib attribs[MAX_ATTRIB_COUNT] = {
+                EGL_LINUX_DRM_FOURCC_EXT, (EGLAttrib)planeFourccs[i],
+                EGL_WIDTH, planeWidth,
+                EGL_HEIGHT, planeHeight,
+                EGL_IMAGE_PRESERVED_KHR, EGL_TRUE,
+                EGL_DMA_BUF_PLANE0_FD_EXT, object.fd,
+                EGL_DMA_BUF_PLANE0_OFFSET_EXT, (EGLAttrib)plane.offset,
+                EGL_DMA_BUF_PLANE0_PITCH_EXT, (EGLAttrib)plane.pitch,
+            };
+            int attribIndex = 14;
+            if (m_DmaBufModifiersSupported && haveModifier) {
+                attribs[attribIndex++] = EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT;
+                attribs[attribIndex++] = (EGLAttrib)(EGLint)(object.format_modifier & 0xFFFFFFFF);
+                attribs[attribIndex++] = EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT;
+                attribs[attribIndex++] = (EGLAttrib)(EGLint)(object.format_modifier >> 32);
+            }
+            attribs[attribIndex++] = EGL_NONE;
+
+            if (m_eglCreateImage != nullptr) {
+                images[i] = m_eglCreateImage(m_EGLDisplay, EGL_NO_CONTEXT,
+                                             EGL_LINUX_DMA_BUF_EXT,
+                                             nullptr, attribs);
+            }
+            else {
+                // Cast the EGLAttrib array elements to EGLint for the KHR extension
+                EGLint intAttribs[MAX_ATTRIB_COUNT];
+                for (int j = 0; j < MAX_ATTRIB_COUNT; j++) {
+                    intAttribs[j] = (EGLint)attribs[j];
+                }
+                images[i] = m_eglCreateImageKHR(m_EGLDisplay, EGL_NO_CONTEXT,
+                                                EGL_LINUX_DMA_BUF_EXT,
+                                                nullptr, intAttribs);
+            }
+
+            if (images[i] == nullptr) {
+                m_ImportFailReason = "eglCreateImage() failed for a dmabuf plane";
+                if (i == 1) {
+                    destroyEglImage(images[0]);
+                }
+                return -1;
+            }
+        }
+
+        return 2;
+    }
+#endif
+
+    void destroyEglImage(EGLImage image)
+    {
+        if (m_eglDestroyImage != nullptr) {
+            m_eglDestroyImage(m_EGLDisplay, image);
+        }
+        else if (m_eglDestroyImageKHR != nullptr) {
+            m_eglDestroyImageKHR(m_EGLDisplay, image);
+        }
+    }
+
+    // Destroys the EGLImages we created ourselves for the current imported
+    // frame (composed path only; exported images from the backend are
+    // destroyed with the frame via its opaque_ref chain). Call only after
+    // the GPU is known to be done sampling them.
+    void destroyOwnedImages()
+    {
+        for (ssize_t i = 0; i < m_OwnedImageCount; i++) {
+            destroyEglImage(m_OwnedImages[i]);
+        }
+        m_OwnedImageCount = 0;
+    }
+
+    // Zero-copy import of one VAAPI frame: obtain one EGLImage per plane
+    // and bind each one to a plain 2D texture for the existing two-texture
+    // NV12 shader (or the tri-planar shader). Separate-layer backends hand
+    // us per-plane images from exportEGLImages(); composed-layer backends
+    // (i965) hand us the raw composed dmabuf via mapDrmPrimeFrame() and we
+    // build the R8/GR88 plane images ourselves. Returns false WITHOUT
+    // freeing the frame so the caller can run the fallback on it. On
+    // success the frame becomes the current frame and the previous frame
+    // retires.
+    bool tryImportFrame(QOpenGLContext* ctx, QOpenGLFunctions* f, AVFrame* frame)
+    {
+        if (!ensureEglSetup(ctx)) {
+            return false;
+        }
+
+        EGLImage images[EGL_MAX_PLANES];
+        ssize_t planeCount;
+        // True when the images are ours to destroy (composed path). On the
+        // separate-layer path they are chained on frame->opaque_ref
+        // (EglImageContext, see eglimagefactory.cpp) and destroyed with
+        // the frame instead.
+        bool ownImages = false;
+
+#ifdef HAVE_DRM
+        if (m_EglExportFormat == AV_PIX_FMT_DRM_PRIME) {
+            planeCount = importComposedPlanes(frame, images);
+            if (planeCount <= 0) {
+                // importComposedPlanes() set m_ImportFailReason
+                return false;
+            }
+            ownImages = true;
+        }
+        else
+#endif
+        {
+            planeCount = m_EglBackend->exportEGLImages(frame, m_EGLDisplay, images);
+            if (planeCount <= 0) {
+                m_ImportFailReason = "backend failed to export EGLImages";
+                return false;
+            }
+
+            // Each plane image must be usable as an ordinary 2D texture (R8
+            // and GR88 for NV12). A single composed image would need an
+            // external sampler, which this render path does not use; the
+            // composed shape is handled by the branch above instead.
+            if (planeCount != 2 && planeCount != 3) {
+                m_ImportFailReason = "unsupported exported plane layout";
+                return false;
+            }
+        }
+
+        if (m_Program == 0 || m_ProgramPlaneCount != (int)planeCount) {
+            if (!createProgram(ctx, f, (int)planeCount)) {
+                m_ImportFailReason = "shader program creation failed";
+                if (ownImages) {
+                    for (ssize_t i = 0; i < planeCount; i++) {
+                        destroyEglImage(images[i]);
+                    }
+                }
+                return false;
+            }
+        }
+
+        // Wait for the GPU to finish with the previous imported frame
+        // before rebinding its textures and freeing it
+        if (m_ImportActive) {
+            waitAndDestroyRenderFence(f);
+        }
+
+        // The previous frame's owned plane images (composed path) can be
+        // destroyed now that the fence has signaled
+        destroyOwnedImages();
+
+        if (m_ImportTextureCount != (int)planeCount) {
+            if (m_ImportTextureCount > 0) {
+                f->glDeleteTextures(m_ImportTextureCount, m_ImportTextures);
+            }
+            f->glGenTextures((GLsizei)planeCount, m_ImportTextures);
+            m_ImportTextureCount = (int)planeCount;
+
+            f->glActiveTexture(GL_TEXTURE0);
+            for (int i = 0; i < m_ImportTextureCount; i++) {
+                f->glBindTexture(GL_TEXTURE_2D, m_ImportTextures[i]);
+                f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            }
+        }
+
+        // Until the first import succeeds, verify with glGetError() that
+        // this driver accepts the images on GL_TEXTURE_2D. Steady state
+        // repeats the identical operation, so we stop checking after that
+        // (no per-frame overhead, no per-frame logging).
+        const bool checkErrors = !m_ZeroCopyLogged;
+        if (checkErrors) {
+            // Clear stale errors so the post-bind check is attributable
+            while (f->glGetError() != GL_NO_ERROR) {}
+        }
+
+        f->glActiveTexture(GL_TEXTURE0);
+        for (int i = 0; i < (int)planeCount; i++) {
+            f->glBindTexture(GL_TEXTURE_2D, m_ImportTextures[i]);
+            m_glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, images[i]);
+        }
+        f->glBindTexture(GL_TEXTURE_2D, 0);
+
+        if (checkErrors && f->glGetError() != GL_NO_ERROR) {
+            // The textures now reference rejected images; drop them so the
+            // draw guard skips rendering until the fallback frame lands
+            f->glDeleteTextures(m_ImportTextureCount, m_ImportTextures);
+            m_ImportTextureCount = 0;
+            if (ownImages) {
+                for (ssize_t i = 0; i < planeCount; i++) {
+                    destroyEglImage(images[i]);
+                }
+            }
+            m_ImportFailReason = "GL rejected the imported images on GL_TEXTURE_2D";
+            return false;
+        }
+
+        // On the composed path the plane images are ours; hold them until
+        // the GPU is done sampling this frame (fence-guarded, destroyed by
+        // the destroyOwnedImages() calls at retire points)
+        if (ownImages) {
+            for (ssize_t i = 0; i < planeCount; i++) {
+                m_OwnedImages[i] = images[i];
+            }
+            m_OwnedImageCount = planeCount;
+        }
+
+        // Retire the previous frame (fence already awaited above) and make
+        // this frame current. Lifetime: at most current plus previous, as M1.
+        av_frame_free(&m_CurrentFrame);
+        m_CurrentFrame = frame;
+        m_ImportActive = true;
+        m_TexWidth = frame->width;
+        m_TexHeight = frame->height;
+        m_TexFormat = frame->format;
+
+        // Color conversion constants for this frame's colorspace and range
+        m_CscHelper.getFramePremultipliedCscConstants(frame, m_CscMatrix, m_YuvOffsets);
+
+        if (!m_ZeroCopyLogged) {
+            m_ZeroCopyLogged = true;
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                        "Zero-copy dmabuf import active (%d plane textures)",
+                        (int)planeCount);
+        }
+
+        return true;
+    }
+#endif
+
     bool createProgram(QOpenGLContext* ctx, QOpenGLFunctions* f, int planeCount)
     {
         if (m_Program != 0) {
@@ -502,6 +1098,18 @@ private:
         QOpenGLContext* ctx = QOpenGLContext::currentContext();
         if (ctx != nullptr) {
             QOpenGLFunctions* f = ctx->functions();
+#ifdef HAVE_EGL
+            if (m_ImportActive) {
+                // The GPU may still be sampling the current frame's
+                // imported images; they are destroyed when the destructor
+                // frees the frame right after this (separate-layer path)
+                // or by destroyOwnedImages() below (composed path)
+                waitAndDestroyRenderFence(f);
+            }
+            if (m_ImportTextureCount > 0) {
+                f->glDeleteTextures(m_ImportTextureCount, m_ImportTextures);
+            }
+#endif
             if (m_TextureCount > 0) {
                 f->glDeleteTextures(m_TextureCount, m_Textures);
             }
@@ -515,6 +1123,36 @@ private:
                 ctx->extraFunctions()->glDeleteVertexArrays(1, &m_Vao);
             }
         }
+
+#ifdef HAVE_EGL
+        // Destroying EGL objects needs only the display, not a current
+        // GL context
+        destroyOwnedImages();
+
+        // Drop any leftover fence handle (no context current case)
+        if (m_LastRenderSync != EGL_NO_SYNC) {
+            if (m_eglDestroySync != nullptr) {
+                m_eglDestroySync(m_EGLDisplay, m_LastRenderSync);
+            }
+            m_LastRenderSync = EGL_NO_SYNC;
+        }
+        m_ImportTextureCount = 0;
+        m_ImportActive = false;
+        m_EglBackend = nullptr;
+        m_EglBackendGeneration = 0;
+        m_EglExportFormat = AV_PIX_FMT_NONE;
+        m_EGLDisplay = EGL_NO_DISPLAY;
+        m_glEGLImageTargetTexture2DOES = nullptr;
+        m_eglCreateSync = nullptr;
+        m_eglCreateSyncKHR = nullptr;
+        m_eglDestroySync = nullptr;
+        m_eglClientWaitSync = nullptr;
+        m_eglCreateImage = nullptr;
+        m_eglCreateImageKHR = nullptr;
+        m_eglDestroyImage = nullptr;
+        m_eglDestroyImageKHR = nullptr;
+        m_DmaBufModifiersSupported = false;
+#endif
 
         // If no context is current, the objects die with the context
         m_TextureCount = 0;
@@ -557,6 +1195,39 @@ private:
     bool m_VaoDecided = false;
 
     bool m_LoggedUploadError = false;
+
+#ifdef HAVE_EGL
+    // Zero-copy import state (issue #507 M2)
+    IFFmpegRenderer* m_EglBackend = nullptr;
+    uint64_t m_EglBackendGeneration = 0;
+    AVPixelFormat m_EglExportFormat = AV_PIX_FMT_NONE;
+    EGLDisplay m_EGLDisplay = EGL_NO_DISPLAY;
+    PfnGlEGLImageTargetTexture2DOES m_glEGLImageTargetTexture2DOES = nullptr;
+    PFNEGLCREATESYNCPROC m_eglCreateSync = nullptr;
+    PFNEGLCREATESYNCKHRPROC m_eglCreateSyncKHR = nullptr;
+    PFNEGLDESTROYSYNCPROC m_eglDestroySync = nullptr;
+    PFNEGLCLIENTWAITSYNCPROC m_eglClientWaitSync = nullptr;
+    PFNEGLCREATEIMAGEPROC m_eglCreateImage = nullptr;
+    PFNEGLCREATEIMAGEKHRPROC m_eglCreateImageKHR = nullptr;
+    PFNEGLDESTROYIMAGEPROC m_eglDestroyImage = nullptr;
+    PFNEGLDESTROYIMAGEKHRPROC m_eglDestroyImageKHR = nullptr;
+    bool m_DmaBufModifiersSupported = false;
+    EGLSync m_LastRenderSync = EGL_NO_SYNC;
+
+    // EGLImages created by importComposedPlanes() for the CURRENT frame.
+    // Empty on the separate-layer path (those images ride the frame's
+    // opaque_ref chain instead).
+    EGLImage m_OwnedImages[EGL_MAX_PLANES] = {};
+    ssize_t m_OwnedImageCount = 0;
+
+    GLuint m_ImportTextures[3] = {};
+    int m_ImportTextureCount = 0;
+    bool m_ImportActive = false;
+    bool m_ImportDisabled = false;
+    bool m_ZeroCopyLogged = false;
+    bool m_FallbackLogged = false;
+    const char* m_ImportFailReason = nullptr;
+#endif
 };
 
 } // namespace

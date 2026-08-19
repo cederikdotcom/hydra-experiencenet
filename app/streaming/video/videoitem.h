@@ -3,10 +3,20 @@
 #include <QQuickItem>
 
 // VideoItem renders scene-mode video frames inside the Qt Quick scene graph
-// (issue #507 M1, copy path). It consumes software frames from
-// QuickSinkBridge and draws them with raw OpenGL through a QSGRenderNode,
-// so no precompiled qsb shaders are needed. The video is letterboxed to
-// preserve the stream aspect ratio inside the item rectangle.
+// (issue #507). It consumes frames from QuickSinkBridge and draws them with
+// raw OpenGL through a QSGRenderNode, so no precompiled qsb shaders are
+// needed. The video is letterboxed to preserve the stream aspect ratio
+// inside the item rectangle.
+//
+// Software frames upload through the M1 copy path. AV_PIX_FMT_VAAPI frames
+// (M2) import zero-copy: one EGLImage per plane binds to plain 2D textures
+// feeding the same shaders. Separate-layer backends provide the plane
+// images through exportEGLImages(); composed-layer backends (i965) provide
+// the raw composed NV12 dmabuf through mapDrmPrimeFrame() and the item
+// imports the R8/GR88 planes itself with per-plane offset and pitch (issue
+// #507 M0 amendment). On any import failure the item logs once, flips the
+// bridge to software readback for the rest of the session, and transfers
+// the failing frame one-off so the stream does not glitch.
 //
 // Requirements: the Qt scene graph must be running on the OpenGL RHI
 // backend (desktop GL or GLES 3). This is the case on the Linux kiosk,

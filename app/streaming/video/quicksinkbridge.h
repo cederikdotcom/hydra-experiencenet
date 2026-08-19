@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QMutex>
 
+#include <atomic>
+
 extern "C" {
 #include <libavutil/frame.h>
 }
@@ -47,6 +49,16 @@ public:
     // newest pending frame to the caller, or returns nullptr if none.
     AVFrame* takeFrame();
 
+    // Issue #507 M2: software-readback preference. When true, the scene-mode
+    // frontend renderer (QuickSinkRenderer) reads hardware frames back to
+    // software frames on the decoder thread before submitting them (the M1
+    // behavior). When false, hardware frames are submitted untouched and
+    // VideoItem imports them zero-copy. VideoItem sets this to true on the
+    // first zero-copy import failure. Reset to false in enable() so every
+    // session retries zero copy.
+    void setPreferSoftware(bool preferSoftware);
+    bool preferSoftware() const;
+
 signals:
     // Emitted (queued across threads) when a new frame is pending. At most
     // one emission is outstanding until the next takeFrame() call.
@@ -60,4 +72,6 @@ private:
     AVFrame* m_PendingFrame = nullptr;
     bool m_Enabled = false;
     bool m_SignalPending = false;
+
+    std::atomic<bool> m_PreferSoftware { false };
 };

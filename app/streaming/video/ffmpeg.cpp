@@ -343,9 +343,11 @@ bool FFmpegVideoDecoder::createFrontendRenderer(PDECODER_PARAMETERS params, bool
     // Scene mode (issue #507): the Qt Quick scene graph renders the video,
     // so the only valid frontend is the sink renderer that forwards frames
     // to it. sceneMode is only ever set on the Linux in-process kiosk path,
-    // so all other platforms and flows are unaffected.
+    // so all other platforms and flows are unaffected. The backend pointer
+    // mirrors the EGLRenderer wiring below: VideoItem reaches the backend's
+    // exported-images interface through it for zero-copy VAAPI import (M2).
     if (params->sceneMode) {
-        m_FrontendRenderer = new QuickSinkRenderer();
+        m_FrontendRenderer = new QuickSinkRenderer(m_BackendRenderer);
         if (initializeRendererInternal(m_FrontendRenderer, params)) {
             return true;
         }

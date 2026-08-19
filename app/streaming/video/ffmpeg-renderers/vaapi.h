@@ -47,6 +47,7 @@ extern "C" {
 #ifdef HAVE_LIBVA_DRM
 #include <va/va_drm.h>
 #endif
+#include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_vaapi.h>
 #if defined(HAVE_EGL) || defined(HAVE_DRM)
 #include <va/va_drmcommon.h>
@@ -93,6 +94,15 @@ private:
     static void freeDrmDescriptorBuffer(void* opaque, uint8_t* data);
 #endif
 
+#ifdef HAVE_LIBVA_DRM
+    // Free callback for the FFmpeg device context in windowless scene mode
+    // (issue #507 M2). It terminates the VA display and closes the DRM fd
+    // when the LAST reference to the device context drops, which may be a
+    // frame retained by QuickSinkBridge or VideoItem after this renderer
+    // was already destroyed by a decoder reset.
+    static void drmDeviceContextFree(AVHWDeviceContext* deviceContext);
+#endif
+
     int m_DecoderSelectionPass;
     int m_WindowSystem;
     AVBufferRef* m_HwContext;
@@ -114,6 +124,11 @@ private:
 
 #ifdef HAVE_LIBVA_DRM
     int m_DrmFd;
+    // True after windowless initialization hands the display and DRM fd
+    // over to the device context (drmDeviceContextFree). The destructor
+    // must then no longer terminate the display itself. Always false on
+    // every windowed path.
+    bool m_DisplayOwnedByHwContext;
 #endif
 
     SDL_Window* m_Window;

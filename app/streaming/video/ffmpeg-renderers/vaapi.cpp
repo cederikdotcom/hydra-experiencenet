@@ -17,6 +17,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 
 VAAPIRenderer::VAAPIRenderer(int decoderSelectionPass)
     : IFFmpegRenderer(RendererType::VAAPI),
@@ -37,6 +38,7 @@ VAAPIRenderer::VAAPIRenderer(int decoderSelectionPass)
 
 #ifdef HAVE_LIBVA_DRM
     m_DrmFd = -1;
+    m_DisplayOwnedByHwContext = false;
 #endif
 
     SDL_zero(m_OverlayImage);
@@ -62,9 +64,20 @@ VAAPIRenderer::~VAAPIRenderer()
             }
         }
 
+        // In windowless scene mode the display and DRM fd are owned by the
+        // device context (see drmDeviceContextFree): frames retained by
+        // QuickSinkBridge/VideoItem may outlive this renderer, and they
+        // need the display alive to release their surfaces. In that mode
+        // the unref below runs the callback once the last frame is gone.
+#ifdef HAVE_LIBVA_DRM
+        bool ownDisplay = !m_DisplayOwnedByHwContext;
+#else
+        bool ownDisplay = true;
+#endif
+
         av_buffer_unref(&m_HwContext);
 
-        if (display) {
+        if (display && ownDisplay) {
             vaTerminate(display);
         }
     }
@@ -86,11 +99,99 @@ VAAPIRenderer::~VAAPIRenderer()
     }
 }
 
+#ifdef HAVE_LIBVA_DRM
+void VAAPIRenderer::drmDeviceContextFree(AVHWDeviceContext* deviceContext)
+{
+    AVVAAPIDeviceContext* vaDeviceContext = (AVVAAPIDeviceContext*)deviceContext->hwctx;
+
+    // Runs when the LAST reference to the device context drops. In
+    // windowless scene mode that can be a frame retained by
+    // QuickSinkBridge or VideoItem, freed after the renderer is gone.
+    if (vaDeviceContext->display != nullptr) {
+        vaTerminate(vaDeviceContext->display);
+    }
+
+    int drmFd = (int)(intptr_t)deviceContext->user_opaque;
+    if (drmFd >= 0) {
+        close(drmFd);
+    }
+}
+#endif
+
 VADisplay
 VAAPIRenderer::openDisplay(SDL_Window* window)
 {
     SDL_SysWMinfo info;
     VADisplay display;
+
+    // Windowless operation for scene mode (issue #507 M2): with no SDL
+    // window there is no window system to query, so open the VA display
+    // directly on a DRM render node, following the same pattern as the
+    // KMSDRM branch below. isDirectRenderingSupported() reports false in
+    // this mode, so the decoder always pairs us with a frontend renderer.
+    if (window == nullptr) {
+#ifdef HAVE_LIBVA_DRM
+        m_WindowSystem = SDL_SYSWM_UNKNOWN;
+
+        // It's possible to enter this function several times as we're probing VA drivers.
+        // Make sure to only open the DRM FD the first time through.
+        if (m_DrmFd < 0) {
+            // Open any DRM render node. Unlike the KMSDRM path, there is
+            // no SDL FD to share, so we always own the FD we open here.
+            int fd = StreamUtils::getDrmFd(true);
+            if (fd < 0) {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                             "Failed to open DRM render node: %d",
+                             errno);
+                return nullptr;
+            }
+
+            // If we could only open a primary node, switch to the matching
+            // render node. Since libva 2.20, using a primary node will fail
+            // in vaGetDriverNames().
+            if (drmGetNodeTypeFromFd(fd) != DRM_NODE_RENDER) {
+                char* renderNodePath = drmGetRenderDeviceNameFromFd(fd);
+                if (renderNodePath) {
+                    // Don't need the primary node FD anymore
+                    close(fd);
+
+                    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                                "Opening render node for VAAPI: %s",
+                                renderNodePath);
+                    m_DrmFd = open(renderNodePath, O_RDWR | O_CLOEXEC);
+                    free(renderNodePath);
+                    if (m_DrmFd < 0) {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                                     "Failed to open render node: %d",
+                                     errno);
+                        return nullptr;
+                    }
+                }
+                else {
+                    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                                "Failed to get render node path. Using the primary node directly.");
+                    m_DrmFd = fd;
+                }
+            }
+            else {
+                m_DrmFd = fd;
+            }
+        }
+
+        display = vaGetDisplayDRM(m_DrmFd);
+        if (display == nullptr) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "Unable to open DRM display for windowless VAAPI");
+            return nullptr;
+        }
+
+        return display;
+#else
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "Windowless VAAPI operation requires libva-drm support!");
+        return nullptr;
+#endif
+    }
 
     SDL_VERSION(&info.version);
 
@@ -463,6 +564,23 @@ VAAPIRenderer::initialize(PDECODER_PARAMETERS params)
 
     m_RequiresExplicitPixelFormat = vendorStr.contains("i965");
 
+#ifdef HAVE_LIBVA_DRM
+    // Windowless scene mode (issue #507 M2): scene-mode consumers
+    // (QuickSinkBridge and VideoItem) can retain VAAPI frames after this
+    // renderer is destroyed on a decoder reset, and freeing those frames
+    // calls back into libva to release their surfaces. Hand ownership of
+    // the display and the DRM fd to the device context so they stay valid
+    // until the LAST reference (renderer or retained frame) drops. Windowed
+    // paths keep the original destructor-owned lifetime.
+    if (m_Window == nullptr) {
+        deviceContext->user_opaque = reinterpret_cast<void*>((intptr_t)m_DrmFd);
+        deviceContext->free = drmDeviceContextFree;
+        m_DisplayOwnedByHwContext = true;
+        // The fd is closed by drmDeviceContextFree now, not the destructor
+        m_DrmFd = -1;
+    }
+#endif
+
     // This will populate the driver_quirks
     err = av_hwdevice_ctx_init(m_HwContext);
     if (err < 0) {
@@ -583,6 +701,15 @@ VAAPIRenderer::prepareDecoderContextInGetFormat(AVCodecContext*, AVPixelFormat)
 bool
 VAAPIRenderer::isDirectRenderingSupported()
 {
+    // Windowless scene mode (issue #507 M2): there is no window to render
+    // into with vaPutSurface(), so the decoder must always pair this
+    // backend with a frontend renderer.
+    if (m_Window == nullptr) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Using indirect rendering for windowless VAAPI");
+        return false;
+    }
+
     if (qgetenv("VAAPI_FORCE_DIRECT") == "1") {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Using direct rendering due to environment variable");

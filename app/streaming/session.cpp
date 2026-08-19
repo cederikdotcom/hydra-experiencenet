@@ -2039,10 +2039,8 @@ void Session::handleSceneDecoderReset()
     // renderer, mirroring the SDL_RENDER_DEVICE_RESET replay block.
     // V-sync and frame pacing stay off: the Qt Quick render loop paces
     // presentation in scene mode.
-    // M1 forces software decode: hardware backends need a window for
-    // SDL_GetWindowWMInfo and fail hard instead of degrading when it is
-    // null. M2 (issue #507 section 3) adds windowless VAAPI and lifts this.
-    if (!chooseDecoder(StreamingPreferences::VDS_FORCE_SOFTWARE,
+    // Windowless VAAPI landed in M2 (issue #507); honor the configured decoder selection.
+    if (!chooseDecoder(m_Preferences->videoDecoderSelection,
                        nullptr, m_ActiveVideoFormat, m_ActiveVideoWidth,
                        m_ActiveVideoHeight, m_ActiveVideoFrameRate,
                        false, false, false,
@@ -2166,9 +2164,8 @@ void Session::exec()
         // first window event. V-sync and frame pacing stay off: the Qt
         // Quick render loop paces presentation in scene mode.
         SDL_LockMutex(m_DecoderLock);
-        // M1 forces software decode here for the same reason as the reset
-        // path above; M2 lifts this with windowless VAAPI.
-        if (!chooseDecoder(StreamingPreferences::VDS_FORCE_SOFTWARE,
+        // Windowless VAAPI landed in M2 (issue #507); honor the configured decoder selection.
+        if (!chooseDecoder(m_Preferences->videoDecoderSelection,
                            nullptr, m_ActiveVideoFormat, m_ActiveVideoWidth,
                            m_ActiveVideoHeight, m_ActiveVideoFrameRate,
                            false, false, false,

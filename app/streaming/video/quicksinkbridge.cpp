@@ -24,6 +24,10 @@ void QuickSinkBridge::enable()
     m_SignalPending = false;
     m_Enabled = true;
 
+    // Every session starts on the zero-copy path and re-engages the
+    // software fallback only if import fails again (issue #507 M2)
+    m_PreferSoftware.store(false, std::memory_order_relaxed);
+
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "QuickSinkBridge enabled");
 }
@@ -38,6 +42,16 @@ void QuickSinkBridge::disable()
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "QuickSinkBridge disabled");
+}
+
+void QuickSinkBridge::setPreferSoftware(bool preferSoftware)
+{
+    m_PreferSoftware.store(preferSoftware, std::memory_order_relaxed);
+}
+
+bool QuickSinkBridge::preferSoftware() const
+{
+    return m_PreferSoftware.load(std::memory_order_relaxed);
 }
 
 bool QuickSinkBridge::isEnabled() const
