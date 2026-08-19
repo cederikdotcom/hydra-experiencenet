@@ -479,12 +479,15 @@ public:
             prefs->videoCodecConfig = StreamingPreferences::VCC_AUTO;
         }
 
-        // The agent's subprocess path always passes --video-decoder
-        // hardware; hardware_decode false degrades to auto, never a
-        // software force.
-        prefs->videoDecoderSelection = hardwareDecode ?
-            StreamingPreferences::VDS_FORCE_HARDWARE :
-            StreamingPreferences::VDS_AUTO;
+        // The agent's subprocess path passes --video-decoder hardware,
+        // but scene mode must not force it: the decoder is created
+        // windowless AFTER the connection is up, and a windowless VAAPI
+        // failure under VDS_FORCE_HARDWARE aborts the live session
+        // (connectionStarted then displayLaunchError in the same second).
+        // VDS_AUTO keeps the hardware preference with the software
+        // fallback M1-M3 shipped and validated on the Haswell fleet.
+        Q_UNUSED(hardwareDecode);
+        prefs->videoDecoderSelection = StreamingPreferences::VDS_AUTO;
 
         // Same value set as StreamCommandLineParser's m_AudioConfigMap
         if (audioConfig == QLatin1String("5.1-surround")) {
