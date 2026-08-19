@@ -156,6 +156,32 @@ public:
     // Collapses the dropdown menu back to just the circle handle.
     void closeExitMenu();
 
+    // Scene mode: the Qt Quick scene graph renders the decoded video
+    // inside the existing kiosk window through QuickSinkBridge, so no
+    // SDL window is created and the SDL event loop never runs. Must be
+    // set before start(). In scene mode exec() is an async start: it
+    // creates the decoder and returns immediately, leaving the Qt event
+    // loop running. The stream ends through stopSession(). Linux only;
+    // the setter ignores enable requests on other platforms.
+    Q_INVOKABLE void setSceneMode(bool enabled);
+    Q_INVOKABLE bool isSceneMode() const { return m_SceneMode; }
+
+    // Thread-safe request to recreate the video decoder in scene mode.
+    // This is the analog of pushing SDL_RENDER_DEVICE_RESET on the SDL
+    // path: it emits a queued signal so the recreation happens on the
+    // main thread. Callable from any thread. No-op outside scene mode.
+    void requestSceneDecoderReset();
+
+public slots:
+    // Scene-mode analog of the DispatchDeferredCleanup block in exec():
+    // destroys the decoder under the decoder lock, disables the frame
+    // bridge, then dispatches DeferredSessionCleanupTask exactly as the
+    // SDL path does (which stops the connection and emits
+    // sessionFinished). Idempotent; only the first call does the work.
+    // Callable from QML to end a scene-mode stream. No-op outside scene
+    // mode.
+    void stopSession();
+
 signals:
     void stageStarting(QString stage);
 
@@ -173,6 +199,21 @@ signals:
     void readyForDeletion();
 
     void launchWarningsChanged();
+
+    // Scene-mode internal routing. These replace the SDL event queue as
+    // the cross-thread hop to the main thread: the connection listener
+    // thread emits sceneConnectionTerminated instead of pushing SDL_QUIT
+    // and the decoder path emits sceneDecoderResetRequested instead of
+    // pushing SDL_RENDER_DEVICE_RESET. Both are connected with queued
+    // connections in setSceneMode().
+    void sceneConnectionTerminated(int errorCode);
+    void sceneDecoderResetRequested();
+
+private slots:
+    // Scene-mode handlers for the signals above; both run on the main
+    // thread via queued connections.
+    void handleSceneConnectionTermination(int errorCode);
+    void handleSceneDecoderReset();
 
 private:
     void exec();
@@ -213,12 +254,17 @@ private:
                                                StreamingPreferences::VideoDecoderSelection vds,
                                                int videoFormat, int width, int height, int frameRate);
 
+    // The trailing sceneMode parameter defaults to false so all existing
+    // call sites are unchanged. Scene-mode callers pass true (with a null
+    // window) so decoder selection picks the scene sink renderer instead
+    // of an SDL-window-backed one.
     static
     bool chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
                        SDL_Window* window, int videoFormat, int width, int height,
                        int frameRate, bool enableVsync, bool enableFramePacing,
                        bool testOnly,
-                       IVideoDecoder*& chosenDecoder);
+                       IVideoDecoder*& chosenDecoder,
+                       bool sceneMode = false);
 
     static
     void clStageStarting(int stage);
@@ -312,6 +358,21 @@ private:
 
     Overlay::OverlayManager m_OverlayManager;
     bool m_ExitMenuOpen = false;
+
+    // Scene-mode state. m_SceneMode is only ever set true by the Linux
+    // kiosk stream page; it stays false everywhere else so the SDL path
+    // is untouched on all other platforms. m_SceneCleanupDone guards
+    // stopSession() against running cleanup twice.
+    bool m_SceneMode = false;
+    bool m_SceneCleanupDone = false;
+
+    // True once exec() has entered its scene-mode branch (the async
+    // connection succeeded and the stream is live). Before that point
+    // stopSession() must not tear the connection down itself: the
+    // connection thread may still be inside LiStartConnection(), which
+    // only LiInterruptConnection() may interrupt safely. exec()'s
+    // failure branch then dispatches the cleanup exactly once.
+    bool m_SceneStreamStarted = false;
 
     static CONNECTION_LISTENER_CALLBACKS k_ConnCallbacks;
     static Session* s_ActiveSession;

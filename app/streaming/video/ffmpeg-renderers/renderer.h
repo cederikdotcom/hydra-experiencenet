@@ -258,6 +258,15 @@ public:
         return true;
     }
 
+    // Scene-mode sink renderers (issue #507) return true so Pacer delivers
+    // frames directly to renderFrame() on the submitting thread, instead of
+    // pushing SDL_CODE_FRAME_READY into an SDL event loop that is not
+    // running in scene mode. In that mode renderFrame() takes ownership of
+    // the frame.
+    virtual bool isDirectFrameDelivery() {
+        return false;
+    }
+
     virtual bool isDirectRenderingSupported() {
         // The renderer can render directly to the display
         return true;

@@ -44,6 +44,11 @@ typedef struct _DECODER_PARAMETERS {
     bool enableVsync;
     bool enableFramePacing;
     bool testOnly;
+
+    // Scene mode (issue #507): the Qt Quick scene graph renders the video,
+    // so frontend selection must pick the QuickSinkRenderer. Only ever true
+    // on the Linux in-process kiosk path; false everywhere else.
+    bool sceneMode;
 } DECODER_PARAMETERS, *PDECODER_PARAMETERS;
 
 #define WINDOW_STATE_CHANGE_SIZE 0x01

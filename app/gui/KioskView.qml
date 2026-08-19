@@ -4,6 +4,10 @@ import QtQuick.Controls.Material 2.2
 import QtQuick.Layouts 1.3
 import QtQuick.Window 2.2
 
+// Needed by the Linux in-process stream path only (issue #507 M1); the
+// launcher's discovery runs against this singleton.
+import ComputerManager 1.0
+
 Item {
     id: kioskRoot
 
@@ -261,7 +265,50 @@ Item {
         diagXhr.send()
     }
 
+    // Issue #507 M1: on Linux the tile tap streams IN PROCESS with the
+    // video rendered inside this Qt window (scene mode). Host and app
+    // are hardcoded for the test head until the agent param API lands
+    // (M4). The launcher comes from a small C++ factory in main.cpp
+    // because CliStartStream::Launcher cannot be built from QML.
+    function startInProcessStream(experienceName) {
+        streaming = true
+        streamingExperience = experienceName
+        errorMessage = ""
+
+        var launcher = kioskSceneStreamHelper.createLauncher()
+        launcher.sessionCreated.connect(function(appName, session) {
+            streaming = false
+            streamingExperience = ""
+            var component = Qt.createComponent("KioskStreamPage.qml")
+            if (component.status === Component.Error) {
+                errorMessage = component.errorString()
+                console.error(component.errorString())
+                return
+            }
+            var page = component.createObject(stackView, {
+                "appName": appName,
+                "session": session
+            })
+            stackView.push(page)
+        })
+        launcher.failed.connect(function(message) {
+            streaming = false
+            streamingExperience = ""
+            errorMessage = message
+            console.error(message)
+        })
+        launcher.execute(ComputerManager)
+    }
+
     function startStream(experienceName) {
+        // Issue #507 M1 gate: Linux streams in process inside this
+        // window. Every other platform takes the unchanged subprocess
+        // path below.
+        if (Qt.platform.os === "linux") {
+            startInProcessStream(experienceName)
+            return
+        }
+
         streaming = true
         streamingExperience = experienceName
         errorMessage = ""

@@ -178,6 +178,22 @@ int Pacer::renderThread(void* context)
 
 void Pacer::enqueueFrameForRenderingAndUnlock(AVFrame *frame)
 {
+    // Scene-mode sink renderers (issue #507) consume frames directly on this
+    // thread because the SDL event loop that would dispatch
+    // SDL_CODE_FRAME_READY is not running in scene mode. Ownership of the
+    // frame transfers to the renderer, so Pacer's deferred-free and render
+    // queue are bypassed entirely.
+    if (m_RenderThread == nullptr && m_VsyncRenderer->isDirectFrameDelivery()) {
+        m_FrameQueueLock.unlock();
+
+        uint64_t beforeRender = LiGetMicroseconds();
+        m_VideoStats->totalPacerTimeUs += (beforeRender - (uint64_t)frame->pkt_dts);
+        m_VsyncRenderer->renderFrame(frame);
+        m_VideoStats->totalRenderTimeUs += (LiGetMicroseconds() - beforeRender);
+        m_VideoStats->renderedFrames++;
+        return;
+    }
+
     dropFrameForEnqueue(m_RenderQueue);
     m_RenderQueue.enqueue(frame);
 

@@ -197,6 +197,7 @@ SOURCES += \
     settings/mappingmanager.cpp \
     gui/sdlgamepadkeynavigation.cpp \
     streaming/video/overlaymanager.cpp \
+    streaming/video/quicksinkbridge.cpp \
     backend/systemproperties.cpp \
     wm.cpp
 
@@ -238,6 +239,7 @@ HEADERS += \
     settings/mappingmanager.h \
     gui/sdlgamepadkeynavigation.h \
     streaming/video/overlaymanager.h \
+    streaming/video/quicksinkbridge.h \
     backend/systemproperties.h
 
 # Platform-specific renderers and decoders
@@ -247,15 +249,19 @@ ffmpeg {
     DEFINES += HAVE_FFMPEG
     SOURCES += \
         streaming/video/ffmpeg.cpp \
+        streaming/video/videoitem.cpp \
         streaming/video/ffmpeg-renderers/genhwaccel.cpp \
+        streaming/video/ffmpeg-renderers/quicksink.cpp \
         streaming/video/ffmpeg-renderers/sdlvid.cpp \
         streaming/video/ffmpeg-renderers/swframemapper.cpp \
         streaming/video/ffmpeg-renderers/pacer/pacer.cpp
 
     HEADERS += \
         streaming/video/ffmpeg.h \
+        streaming/video/videoitem.h \
         streaming/video/ffmpeg-renderers/renderer.h \
         streaming/video/ffmpeg-renderers/genhwaccel.h \
+        streaming/video/ffmpeg-renderers/quicksink.h \
         streaming/video/ffmpeg-renderers/sdlvid.h \
         streaming/video/ffmpeg-renderers/swframemapper.h \
         streaming/video/ffmpeg-renderers/pacer/pacer.h

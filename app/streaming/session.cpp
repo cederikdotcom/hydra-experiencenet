@@ -3,6 +3,10 @@
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
 
+// Scene-mode frame hand-off to the Qt Quick VideoItem. The bridge is a
+// cross-platform QObject singleton; Session only enables and disables it.
+#include "video/quicksinkbridge.h"
+
 #include <Limelight.h>
 #include "SDL_compat.h"
 #include "utils.h"
@@ -138,6 +142,14 @@ void Session::clConnectionTerminated(int errorCode)
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                  "Connection terminated: %d",
                  errorCode);
+
+    // Scene mode has no SDL event loop to receive SDL_QUIT. Emit a
+    // queued signal instead; handleSceneConnectionTermination() runs
+    // stopSession() on the main thread.
+    if (s_ActiveSession->m_SceneMode) {
+        emit s_ActiveSession->sceneConnectionTerminated(errorCode);
+        return;
+    }
 
     // Push a quit event to the main loop
     SDL_Event event;
@@ -279,7 +291,8 @@ void Session::clSetAdaptiveTriggers(uint16_t controllerNumber, uint8_t eventFlag
 
 bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
                             SDL_Window* window, int videoFormat, int width, int height,
-                            int frameRate, bool enableVsync, bool enableFramePacing, bool testOnly, IVideoDecoder*& chosenDecoder)
+                            int frameRate, bool enableVsync, bool enableFramePacing, bool testOnly, IVideoDecoder*& chosenDecoder,
+                            bool sceneMode)
 {
     DECODER_PARAMETERS params;
 
@@ -297,6 +310,12 @@ bool Session::chooseDecoder(StreamingPreferences::VideoDecoderSelection vds,
     params.enableFramePacing = enableFramePacing;
     params.testOnly = testOnly;
     params.vds = vds;
+
+    // Scene mode routes frames to the Qt Quick scene graph, so decoder
+    // selection must pick the scene sink renderer and never attempt an
+    // SDL-window-backed renderer (window is null in that case). Always
+    // assigned so the field is never uninitialized on the SDL path.
+    params.sceneMode = sceneMode;
 
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "V-sync %s",
@@ -1738,6 +1757,12 @@ void Session::setShouldExit(bool quitHostApp)
 
 void Session::showExitOverlay()
 {
+    if (m_SceneMode) {
+        // The QML kiosk stream page owns the exit overlay in scene mode;
+        // the SDL-rendered overlay must never be asserted.
+        return;
+    }
+
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "exit-overlay: showExitOverlay called");
 
     // Subtle circle handle at the top-right of the stream. Small enough to
@@ -1856,6 +1881,17 @@ void Session::triggerExitFromMenu()
 {
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "exit-overlay: menu item tapped, requesting clean disconnect");
+
+    if (m_SceneMode) {
+        // Scene mode has no SDL overlays and no SDL event loop. The QML
+        // page owns the exit UI; ending the stream is a direct stop that
+        // keeps the kiosk app running. We deliberately skip
+        // setShouldExit(), which would quit the whole process after
+        // cleanup: correct for the subprocess model, wrong in-process.
+        stopSession();
+        return;
+    }
+
     m_ExitMenuOpen = false;
     m_OverlayManager.setOverlayState(Overlay::OverlayExitMenu, false);
     m_OverlayManager.setOverlayState(Overlay::OverlayExitButton, false);
@@ -1908,11 +1944,178 @@ void Session::interrupt()
     // Stop any connection in progress
     LiInterruptConnection();
 
+    if (m_SceneMode) {
+        // No SDL event loop exists to receive a quit event in scene mode.
+        // If the stream is already set up, stop it directly. If the async
+        // connection is still starting, LiInterruptConnection() makes it
+        // fail and exec() dispatches cleanup itself.
+        if (m_VideoDecoder != nullptr) {
+            stopSession();
+        }
+        return;
+    }
+
     // Inject a quit event to our SDL event loop
     SDL_Event event;
     event.type = SDL_QUIT;
     event.quit.timestamp = SDL_GetTicks();
     SDL_PushEvent(&event);
+}
+
+void Session::setSceneMode(bool enabled)
+{
+#ifndef Q_OS_LINUX
+    // Scene mode ships on Linux only for now. Refuse to enable it
+    // elsewhere so macOS and Windows builds cannot enter this path even
+    // by accident; their behavior stays identical to the SDL path.
+    if (enabled) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "Scene mode is only supported on Linux; ignoring enable request");
+        return;
+    }
+#endif
+
+    if (m_SceneMode == enabled) {
+        return;
+    }
+
+    m_SceneMode = enabled;
+
+    if (enabled) {
+        // Queued connections so the connection listener thread and the
+        // decoder path hop to the main thread, replacing the SDL event
+        // queue the SDL path uses for the same purpose. UniqueConnection
+        // keeps a toggle from connecting twice.
+        connect(this, &Session::sceneConnectionTerminated,
+                this, &Session::handleSceneConnectionTermination,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+        connect(this, &Session::sceneDecoderResetRequested,
+                this, &Session::handleSceneDecoderReset,
+                static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
+    }
+}
+
+void Session::requestSceneDecoderReset()
+{
+    if (!m_SceneMode) {
+        return;
+    }
+
+    // Thread-safe: signal emission may happen on any thread and the
+    // queued connection runs handleSceneDecoderReset() on the main
+    // thread, just like the SDL_RENDER_DEVICE_RESET event does for the
+    // SDL path.
+    emit sceneDecoderResetRequested();
+}
+
+void Session::handleSceneConnectionTermination(int errorCode)
+{
+    if (!m_SceneMode) {
+        return;
+    }
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Scene mode: connection terminated (%d), stopping session",
+                errorCode);
+    stopSession();
+}
+
+void Session::handleSceneDecoderReset()
+{
+    if (!m_SceneMode || m_SceneCleanupDone) {
+        return;
+    }
+
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                "Scene mode: recreating decoder by internal request");
+
+    SDL_LockMutex(m_DecoderLock);
+
+    // Destroy the old decoder
+    delete m_VideoDecoder;
+    m_VideoDecoder = nullptr;
+
+    // Choose a new decoder with a null window and the scene sink
+    // renderer, mirroring the SDL_RENDER_DEVICE_RESET replay block.
+    // V-sync and frame pacing stay off: the Qt Quick render loop paces
+    // presentation in scene mode.
+    if (!chooseDecoder(m_Preferences->videoDecoderSelection,
+                       nullptr, m_ActiveVideoFormat, m_ActiveVideoWidth,
+                       m_ActiveVideoHeight, m_ActiveVideoFrameRate,
+                       false, false, false,
+                       m_VideoDecoder, true)) {
+        SDL_UnlockMutex(m_DecoderLock);
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "Failed to recreate decoder after reset");
+        emit displayLaunchError(tr("Unable to initialize video decoder. Please check your streaming settings and try again."));
+        stopSession();
+        return;
+    }
+
+    // Request an IDR frame to complete the reset
+    LiRequestIdrFrame();
+
+    // Set HDR mode. We may miss the callback if we're in the middle
+    // of recreating our decoder at the time the HDR transition happens.
+    m_VideoDecoder->setHdrMode(LiGetCurrentHostDisplayHdrMode());
+
+    SDL_UnlockMutex(m_DecoderLock);
+}
+
+void Session::stopSession()
+{
+    // Scene-mode analog of exec()'s DispatchDeferredCleanup block. The
+    // QML kiosk stream page calls this to end the stream, and the
+    // connection-terminated path funnels here too. Only the first call
+    // performs cleanup.
+    if (!m_SceneMode || m_SceneCleanupDone) {
+        return;
+    }
+
+    if (!m_SceneStreamStarted) {
+        // The async connection has not handed off to exec() yet, so the
+        // connection thread may still be inside LiStartConnection().
+        // Tearing down here would race it and dispatch cleanup twice.
+        // Interrupt the attempt instead; exec()'s failure branch runs
+        // the cleanup once the connection thread finishes.
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Scene mode: stop requested before stream start, interrupting connection");
+        LiInterruptConnection();
+        return;
+    }
+
+    m_SceneCleanupDone = true;
+
+    SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                "Scene mode: stopping session");
+
+    // Destroy the input handler, mirroring the SDL path. It has no SDL
+    // window in scene mode, but it still owns the gamepad state created
+    // in start() and must be gone before SdlGamepadKeyNavigation resumes.
+    delete m_InputHandler;
+    m_InputHandler = nullptr;
+
+    // Destroy the decoder, since this must be done on the main thread.
+    // NB: This must happen before LiStopConnection() (which runs in
+    // DeferredSessionCleanupTask) for pull-based decoders.
+    SDL_LockMutex(m_DecoderLock);
+    delete m_VideoDecoder;
+    m_VideoDecoder = nullptr;
+    SDL_UnlockMutex(m_DecoderLock);
+
+    // Stop routing frames to the scene graph and free any latched frame.
+    // After the decoder is destroyed nothing can submit new frames.
+    QuickSinkBridge::instance()->disable();
+
+    // Balance the SDL_InitSubSystem(SDL_INIT_VIDEO) call in initialize().
+    // The SDL path does this on every exec() exit path.
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+
+    // Cleanup can take a while, so dispatch it to a worker thread,
+    // exactly as the SDL path does. It stops the connection, emits
+    // sessionFinished() (or quitStarting() first when quitting the host
+    // app), and releases s_ActiveSessionSemaphore.
+    QThreadPool::globalInstance()->start(new DeferredSessionCleanupTask(this));
 }
 
 void Session::exec()
@@ -1922,7 +2125,70 @@ void Session::exec()
         delete m_InputHandler;
         m_InputHandler = nullptr;
         SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        // Scene mode: mark cleanup as dispatched so a later stopSession()
+        // call from the QML page cannot run cleanup a second time.
+        if (m_SceneMode) {
+            m_SceneCleanupDone = true;
+        }
         QThreadPool::globalInstance()->start(new DeferredSessionCleanupTask(this));
+        return;
+    }
+
+    if (m_SceneMode) {
+        // Scene mode: the Qt Quick scene graph renders the video inside
+        // the existing kiosk window, so we create no SDL window and never
+        // enter the SDL event loop. exec() is an async start here: it
+        // creates the decoder and returns immediately with the Qt event
+        // loop still running. The session ends through stopSession(),
+        // which dispatches the same deferred cleanup path as the SDL
+        // loop's DispatchDeferredCleanup block.
+        if (m_SceneCleanupDone) {
+            // The connection terminated (or the page bailed out) before
+            // we were scheduled; stopSession() already dispatched cleanup.
+            return;
+        }
+
+        // The stream is live from this point: stopSession() now performs
+        // the full teardown itself instead of interrupting a pending
+        // connection attempt.
+        m_SceneStreamStarted = true;
+
+        // Route decoded frames to the Qt Quick VideoItem. Enabled before
+        // decoder creation so no early frame is dropped.
+        QuickSinkBridge::instance()->enable();
+
+        // Create the decoder with a null window and the scene sink
+        // renderer. This mirrors the initial decoder creation the SDL
+        // path performs in its SDL_RENDER_DEVICE_RESET block on the
+        // first window event. V-sync and frame pacing stay off: the Qt
+        // Quick render loop paces presentation in scene mode.
+        SDL_LockMutex(m_DecoderLock);
+        if (!chooseDecoder(m_Preferences->videoDecoderSelection,
+                           nullptr, m_ActiveVideoFormat, m_ActiveVideoWidth,
+                           m_ActiveVideoHeight, m_ActiveVideoFrameRate,
+                           false, false, false,
+                           m_VideoDecoder, true)) {
+            SDL_UnlockMutex(m_DecoderLock);
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "Failed to create decoder in scene mode");
+            emit displayLaunchError(tr("Unable to initialize video decoder. Please check your streaming settings and try again."));
+            stopSession();
+            return;
+        }
+
+        // Request an IDR frame to start the stream
+        LiRequestIdrFrame();
+
+        // Set HDR mode. We may have missed the callback while the
+        // decoder did not exist yet.
+        m_VideoDecoder->setHdrMode(LiGetCurrentHostDisplayHdrMode());
+
+        SDL_UnlockMutex(m_DecoderLock);
+
+        // From here on, any termination is expected unless the
+        // connection termination callback says otherwise.
+        m_UnexpectedTermination = false;
+
         return;
     }
 

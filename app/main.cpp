@@ -26,6 +26,8 @@
 
 #ifdef HAVE_FFMPEG
 #include "streaming/video/ffmpeg.h"
+// Scene-mode QML video item for the in-process kiosk stream (issue #507).
+#include "streaming/video/videoitem.h"
 #endif
 
 #if defined(Q_OS_WIN32)
@@ -423,6 +425,55 @@ void configureSignalHandlers()
 
 #endif
 
+// In-process kiosk stream factory for issue #507 M1 (Linux scene mode).
+// KioskView.qml cannot construct CliStartStream::Launcher itself (it is
+// not default-constructible), so this tiny helper builds a fresh one per
+// tile tap with the M1 hardcoded host, app, and stream settings for the
+// omarchy test head. M4 replaces the hardcoded values with agent-provided
+// parameters. The class compiles on every platform, but it is only
+// instantiated and exposed to QML inside the Linux kiosk branch below,
+// and its QML call site sits behind a Qt.platform.os === "linux" gate,
+// so macOS and Windows behavior is unchanged.
+class KioskSceneStreamHelper : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit KioskSceneStreamHelper(QObject *parent = nullptr) : QObject(parent) {}
+
+    // Returns a fresh launcher configured with the M1 hardcoded stream
+    // parameters. The launcher is parented to this helper so the QML
+    // engine does not garbage collect it mid-flight; the previous
+    // cycle's launcher is released on the next call.
+    Q_INVOKABLE QObject* createLauncher()
+    {
+        // M1 hardcoded stream settings (issue #507): H.264 1080p60 at
+        // 20 Mbps, absolute mouse mode, and quit the host app when the
+        // visitor exits. Window mode is irrelevant in scene mode.
+        StreamingPreferences* prefs = StreamingPreferences::get();
+        prefs->width = 1920;
+        prefs->height = 1080;
+        prefs->fps = 60;
+        prefs->bitrateKbps = 20000;
+        prefs->videoCodecConfig = StreamingPreferences::VCC_FORCE_H264;
+        prefs->enableHdr = false;
+        prefs->absoluteMouseMode = true;
+        prefs->quitAppAfter = true;
+
+        if (m_Launcher != nullptr) {
+            m_Launcher->deleteLater();
+        }
+        m_Launcher = new CliStartStream::Launcher(
+            QStringLiteral("10.10.100.12"),
+            QStringLiteral("rupelmonde-castle-viewer"),
+            prefs, false, this);
+        return m_Launcher;
+    }
+
+private:
+    CliStartStream::Launcher* m_Launcher = nullptr;
+};
+
 int main(int argc, char *argv[])
 {
     SDL_SetMainReady();
@@ -583,6 +634,14 @@ int main(int argc, char *argv[])
     if (!Utils::getEnvironmentVariableOverride("FORCE_QT_GLES", &forceGles)) {
         forceGles = WMUtils::isRunningNvidiaProprietaryDriverX11() ||
                     !WMUtils::supportsDesktopGLWithEGL();
+    }
+    // Issue #507 M0 amendment (prepared but dormant): Qt lands on desktop
+    // OpenGL on the omarchy kiosk head today. If the scene-mode video path
+    // ever needs a GLES context (fallback A external samplers), set
+    // HYDRA_KIOSK_FORCE_GLES=1 on the head. Default off, so no platform
+    // changes behavior without the env var.
+    if (qEnvironmentVariableIntValue("HYDRA_KIOSK_FORCE_GLES") != 0) {
+        forceGles = true;
     }
     if (forceGles) {
         // The Nvidia proprietary driver causes Qt to render a black window when using
@@ -915,6 +974,12 @@ int main(int argc, char *argv[])
                                                    [](QQmlEngine* qmlEngine, QJSEngine*) -> QObject* {
                                                        return StreamingPreferences::get(qmlEngine);
                                                    });
+#ifdef HAVE_FFMPEG
+    // Issue #507 M1: scene-mode video item. Registered on every
+    // ffmpeg-enabled build so KioskStreamPage.qml always resolves, but
+    // only instantiated behind the Linux kiosk gate in KioskView.qml.
+    qmlRegisterType<VideoItem>("VideoItem", 1, 0, "VideoItem");
+#endif
 
     // Create the identity manager on the main thread
     IdentityManager::get();
@@ -1050,6 +1115,15 @@ int main(int argc, char *argv[])
             localServer->start();
             engine.rootContext()->setContextProperty("localServerBridge", localServer);
 
+#ifdef Q_OS_LINUX
+            // Issue #507 M1: in-process scene-mode stream factory.
+            // Linux only; other platforms keep the agent subprocess
+            // path and never reference this property (the QML call
+            // site is behind a Qt.platform.os === "linux" gate).
+            engine.rootContext()->setContextProperty("kioskSceneStreamHelper",
+                                                     new KioskSceneStreamHelper(&app));
+#endif
+
             break;
         }
     }
@@ -1102,3 +1176,7 @@ int main(int argc, char *argv[])
 
     return err;
 }
+
+// Needed for the Q_OBJECT KioskSceneStreamHelper class defined in this
+// file (issue #507 M1). Same pattern as computermanager.cpp.
+#include "main.moc"

@@ -13,6 +13,9 @@ extern "C" {
 #include "ffmpeg-renderers/sdlvid.h"
 #include "ffmpeg-renderers/genhwaccel.h"
 
+// Scene-mode sink renderer for the in-process kiosk stream (issue #507)
+#include "ffmpeg-renderers/quicksink.h"
+
 #ifdef Q_OS_WIN32
 #include "ffmpeg-renderers/dxva2.h"
 #include "ffmpeg-renderers/d3d11va.h"
@@ -337,6 +340,20 @@ bool FFmpegVideoDecoder::initializeRendererInternal(IFFmpegRenderer* renderer, P
 
 bool FFmpegVideoDecoder::createFrontendRenderer(PDECODER_PARAMETERS params, bool useAlternateFrontend)
 {
+    // Scene mode (issue #507): the Qt Quick scene graph renders the video,
+    // so the only valid frontend is the sink renderer that forwards frames
+    // to it. sceneMode is only ever set on the Linux in-process kiosk path,
+    // so all other platforms and flows are unaffected.
+    if (params->sceneMode) {
+        m_FrontendRenderer = new QuickSinkRenderer();
+        if (initializeRendererInternal(m_FrontendRenderer, params)) {
+            return true;
+        }
+        delete m_FrontendRenderer;
+        m_FrontendRenderer = nullptr;
+        return false;
+    }
+
     bool glIsSlow;
     bool vulkanIsSlow;
 
@@ -1985,9 +2002,18 @@ void FFmpegVideoDecoder::decoderThreadProc()
                         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                                      "Resetting decoder due to consistent failure");
 
-                        SDL_Event event;
-                        event.type = SDL_RENDER_DEVICE_RESET;
-                        SDL_PushEvent(&event);
+                        // Scene mode (issue #507) has no SDL event loop to
+                        // consume SDL_RENDER_DEVICE_RESET, so route the reset
+                        // request through Session to the main thread instead.
+                        Session* session = Session::get();
+                        if (session != nullptr && session->isSceneMode()) {
+                            session->requestSceneDecoderReset();
+                        }
+                        else {
+                            SDL_Event event;
+                            event.type = SDL_RENDER_DEVICE_RESET;
+                            SDL_PushEvent(&event);
+                        }
 
                         // Don't consume any additional data
                         SDL_AtomicSet(&m_DecoderThreadShouldQuit, 1);
@@ -2113,9 +2139,18 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
                          "Resetting decoder due to consistent failure");
 
-            SDL_Event event;
-            event.type = SDL_RENDER_DEVICE_RESET;
-            SDL_PushEvent(&event);
+            // Scene mode (issue #507) has no SDL event loop to consume
+            // SDL_RENDER_DEVICE_RESET, so route the reset request through
+            // Session to the main thread instead.
+            Session* session = Session::get();
+            if (session != nullptr && session->isSceneMode()) {
+                session->requestSceneDecoderReset();
+            }
+            else {
+                SDL_Event event;
+                event.type = SDL_RENDER_DEVICE_RESET;
+                SDL_PushEvent(&event);
+            }
 
             // Don't consume any additional data
             SDL_AtomicSet(&m_DecoderThreadShouldQuit, 1);
