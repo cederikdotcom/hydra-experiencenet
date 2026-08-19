@@ -30,6 +30,27 @@ void ComputerSeeker::start(int timeout)
     // would find the host
     m_ComputerManager->addNewHostManually(m_ComputerName);
     m_ComputerManager->startPolling();
+
+    // The seeker only reacts to computerStateChanged events. In a warm
+    // process (the kiosk starting an in-process stream) the target can
+    // already be online from earlier polling, in which case no state
+    // change ever fires during the seek window and the seeker times out
+    // staring at a live host. Check current state once, after the event
+    // loop settles, so the found path stays asynchronous.
+    QMetaObject::invokeMethod(this, [this]() {
+        if (!m_TimeoutTimer->isActive()) {
+            return;
+        }
+        const auto computers = m_ComputerManager->getComputers();
+        for (NvComputer* computer : computers) {
+            if (matchComputer(computer) && isOnline(computer)) {
+                m_ComputerManager->stopPollingAsync();
+                m_TimeoutTimer->stop();
+                emit computerFound(computer);
+                return;
+            }
+        }
+    }, Qt::QueuedConnection);
 }
 
 void ComputerSeeker::onComputerUpdated(NvComputer *computer)
