@@ -372,3 +372,11 @@ Linux heads run the fork as an AppImage installed by the hydraheadflatscreen age
 ### Runtime
 
 Launch with `QT_QPA_PLATFORM=xcb` (XWayland): the validated path on Hyprland; native Wayland has known upstream issues. The kiosk subcommand and the local API on 9741 behave as on macOS. The help dialog shows the agent version fetched from the agent's `GET /api/v1/version` (agent v2.2.3+).
+
+## Scene mode (in-process kiosk streaming, Linux)
+
+Issue #507's program. On Linux kiosk heads the tile tap streams IN PROCESS: Session runs in scene mode (no SDL window), decoded frames render inside the Qt scene graph (VideoItem, zero-copy VAAPI dmabuf import with automatic software fallback), and all pointer input is sent to the host as TOUCH events (fleet bodies standardize on touch; non-touch hosts get a logged-once mouse fallback). The local cursor always stays visible: the host renders no pointer for touch input. Keyboard rides an evdev-to-VK table (xcb only). macOS and Windows are untouched: the code is double-gated (Session::setSceneMode refuses off Linux, the QML gate checks the platform) and rides tags as dead code.
+
+Status as of 2026-08-20: M1 through M3 implemented, owner-validated on the omarchy head (touch works, stream smooth, one OS window, no stream subprocess). M4 (agent-driven stream params replacing the hardcoded test target, in-scene 3-dot overlay) and M5 (hardening, soak, Wayland experiment) remain: see issue #507 for the full log, acceptance evidence, and the M1 warm-process launcher fixes that also affect the CLI paths (ComputerSeeker and CliStartStream now handle already-online computers and pre-populated app lists).
+
+Body-side gotcha rediscovered during M3 acceptance: duplicate Virtual Display Driver instances on a body break absolute input injection (issue #428): taps land offset while drags work. Check Get-PnpDevice -Class Display on the body before debugging the head.
