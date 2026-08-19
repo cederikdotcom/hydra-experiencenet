@@ -4,7 +4,7 @@ import QtQuick.Controls.Material 2.2
 import QtQuick.Layouts 1.3
 import QtQuick.Window 2.2
 
-// Needed by the Linux in-process stream path only (issue #507 M1); the
+// Needed by the Linux in-process stream path only (issue #507); the
 // launcher's discovery runs against this singleton.
 import ComputerManager 1.0
 
@@ -265,17 +265,61 @@ Item {
         diagXhr.send()
     }
 
-    // Issue #507 M1: on Linux the tile tap streams IN PROCESS with the
-    // video rendered inside this Qt window (scene mode). Host and app
-    // are hardcoded for the test head until the agent param API lands
-    // (M4). The launcher comes from a small C++ factory in main.cpp
-    // because CliStartStream::Launcher cannot be built from QML.
-    function startInProcessStream(experienceName) {
-        streaming = true
-        streamingExperience = experienceName
-        errorMessage = ""
+    // Issue #507 M4: fire-and-forget state push to the agent. The agent
+    // maps these onto its head status; the kiosk never couples UI to the
+    // response.
+    function postStreamState(state, detail) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:9740/api/v1/stream/state")
+        xhr.setRequestHeader("Content-Type", "application/json")
+        var body = { "state": state }
+        if (detail !== undefined && detail !== "") {
+            body["detail"] = detail
+        }
+        xhr.send(JSON.stringify(body))
+    }
 
-        var launcher = kioskSceneStreamHelper.createLauncher()
+    // Issue #507 M4: the agent has run discovery and pairing and reports
+    // "ready". Fetch the stream parameters it computed and launch the
+    // in-process scene-mode stream (Linux only; the call site is behind
+    // the Qt.platform.os gate in pollStreamStatus).
+    function fetchParamsAndLaunch() {
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            var params = null
+            if (xhr.status === 200) {
+                try {
+                    params = JSON.parse(xhr.responseText)
+                } catch (e) {
+                    params = null
+                }
+            }
+            if (params === null || !params.host || !params.app) {
+                streaming = false
+                streamingExperience = ""
+                errorMessage = qsTr("Could not fetch stream parameters")
+                console.error("stream/params fetch failed, HTTP status " + xhr.status)
+                postStreamState("error", "params fetch failed, HTTP status " + xhr.status)
+                return
+            }
+            launchInProcessStream(params)
+        }
+        xhr.open("GET", "http://127.0.0.1:9740/api/v1/stream/params")
+        xhr.send()
+    }
+
+    // Issue #507: streams IN PROCESS with the video rendered inside this
+    // Qt window (scene mode), from agent-provided parameters applied
+    // verbatim. The launcher comes from a small C++ factory in main.cpp
+    // because CliStartStream::Launcher cannot be built from QML.
+    function launchInProcessStream(params) {
+        var launcher = kioskSceneStreamHelper.createLauncher(
+                    params.host, params.app,
+                    params.width, params.height, params.fps,
+                    params.bitrate_kbps, params.video_codec,
+                    params.hardware_decode, params.audio_config,
+                    params.absolute_mouse, params.quit_app_after)
         launcher.sessionCreated.connect(function(appName, session) {
             streaming = false
             streamingExperience = ""
@@ -283,6 +327,7 @@ Item {
             if (component.status === Component.Error) {
                 errorMessage = component.errorString()
                 console.error(component.errorString())
+                postStreamState("error", component.errorString())
                 return
             }
             var page = component.createObject(stackView, {
@@ -296,19 +341,13 @@ Item {
             streamingExperience = ""
             errorMessage = message
             console.error(message)
+            postStreamState("error", message)
         })
+        postStreamState("connecting")
         launcher.execute(ComputerManager)
     }
 
     function startStream(experienceName) {
-        // Issue #507 M1 gate: Linux streams in process inside this
-        // window. Every other platform takes the unchanged subprocess
-        // path below.
-        if (Qt.platform.os === "linux") {
-            startInProcessStream(experienceName)
-            return
-        }
-
         streaming = true
         streamingExperience = experienceName
         errorMessage = ""
@@ -336,6 +375,21 @@ Item {
             kioskRoot, 'statusPollTimer')
         statusPollTimer.triggered.connect(function() {
             fetchData("http://localhost:9740/api/v1/stream/status", function(data) {
+                // Issue #507 M4 gate: on Linux "ready" means the agent
+                // finished discovery and pairing and holds the stream
+                // parameters for the in-process scene-mode launch. Every
+                // other platform keeps the legacy branch below, where
+                // "ready" is terminal back-to-grid (the agent never emits
+                // it on the subprocess path).
+                if (data.status === "ready" && Qt.platform.os === "linux") {
+                    if (statusPollTimer) {
+                        statusPollTimer.running = false
+                        statusPollTimer.destroy()
+                        statusPollTimer = null
+                    }
+                    fetchParamsAndLaunch()
+                    return
+                }
                 // The agent reports "idle" after a stream has exited
                 // (cleanup by waitForStreamExit in localapi.go). We used
                 // to only recognize "ready" which the agent never emits,

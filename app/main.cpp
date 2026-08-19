@@ -425,15 +425,15 @@ void configureSignalHandlers()
 
 #endif
 
-// In-process kiosk stream factory for issue #507 M1 (Linux scene mode).
+// In-process kiosk stream factory for issue #507 (Linux scene mode).
 // KioskView.qml cannot construct CliStartStream::Launcher itself (it is
 // not default-constructible), so this tiny helper builds a fresh one per
-// tile tap with the M1 hardcoded host, app, and stream settings for the
-// omarchy test head. M4 replaces the hardcoded values with agent-provided
-// parameters. The class compiles on every platform, but it is only
-// instantiated and exposed to QML inside the Linux kiosk branch below,
-// and its QML call site sits behind a Qt.platform.os === "linux" gate,
-// so macOS and Windows behavior is unchanged.
+// tile tap from the parameters the agent serves on
+// GET /api/v1/stream/params (issue #507 M4). The class compiles on every
+// platform, but it is only instantiated and exposed to QML inside the
+// Linux kiosk branch below, and its QML call site sits behind a
+// Qt.platform.os === "linux" gate, so macOS and Windows behavior is
+// unchanged.
 class KioskSceneStreamHelper : public QObject
 {
     Q_OBJECT
@@ -441,32 +441,79 @@ class KioskSceneStreamHelper : public QObject
 public:
     explicit KioskSceneStreamHelper(QObject *parent = nullptr) : QObject(parent) {}
 
-    // Returns a fresh launcher configured with the M1 hardcoded stream
-    // parameters. The launcher is parented to this helper so the QML
-    // engine does not garbage collect it mid-flight; the previous
-    // cycle's launcher is released on the next call.
-    Q_INVOKABLE QObject* createLauncher()
+    // Returns a fresh launcher configured with the agent-provided stream
+    // parameters, applied verbatim. The mapping onto StreamingPreferences
+    // mirrors how the agent's subprocess args (moonlightStreamArgs) land
+    // through StreamCommandLineParser today, including the fixed flags
+    // the agent always passes (--display-mode borderless, --frame-pacing,
+    // --vsync, --no-hdr, --keep-awake, --no-performance-overlay). The
+    // launcher is parented to this helper so the QML engine does not
+    // garbage collect it mid-flight; the previous cycle's launcher is
+    // released on the next call.
+    Q_INVOKABLE QObject* createLauncher(const QString &host,
+                                        const QString &app,
+                                        int width,
+                                        int height,
+                                        int fps,
+                                        int bitrateKbps,
+                                        const QString &videoCodec,
+                                        bool hardwareDecode,
+                                        const QString &audioConfig,
+                                        bool absoluteMouse,
+                                        bool quitAppAfter)
     {
-        // M1 hardcoded stream settings (issue #507): H.264 1080p60 at
-        // 20 Mbps, absolute mouse mode, and quit the host app when the
-        // visitor exits. Window mode is irrelevant in scene mode.
         StreamingPreferences* prefs = StreamingPreferences::get();
-        prefs->width = 1920;
-        prefs->height = 1080;
-        prefs->fps = 60;
-        prefs->bitrateKbps = 20000;
-        prefs->videoCodecConfig = StreamingPreferences::VCC_FORCE_H264;
+        prefs->width = width;
+        prefs->height = height;
+        prefs->fps = fps;
+        prefs->bitrateKbps = bitrateKbps;
+
+        // Same value set as StreamCommandLineParser's m_VideoCodecMap
+        if (videoCodec == QLatin1String("H.264")) {
+            prefs->videoCodecConfig = StreamingPreferences::VCC_FORCE_H264;
+        }
+        else if (videoCodec == QLatin1String("HEVC")) {
+            prefs->videoCodecConfig = StreamingPreferences::VCC_FORCE_HEVC;
+        }
+        else {
+            prefs->videoCodecConfig = StreamingPreferences::VCC_AUTO;
+        }
+
+        // The agent's subprocess path always passes --video-decoder
+        // hardware; hardware_decode false degrades to auto, never a
+        // software force.
+        prefs->videoDecoderSelection = hardwareDecode ?
+            StreamingPreferences::VDS_FORCE_HARDWARE :
+            StreamingPreferences::VDS_AUTO;
+
+        // Same value set as StreamCommandLineParser's m_AudioConfigMap
+        if (audioConfig == QLatin1String("5.1-surround")) {
+            prefs->audioConfig = StreamingPreferences::AC_51_SURROUND;
+        }
+        else if (audioConfig == QLatin1String("7.1-surround")) {
+            prefs->audioConfig = StreamingPreferences::AC_71_SURROUND;
+        }
+        else {
+            prefs->audioConfig = StreamingPreferences::AC_STEREO;
+        }
+
+        prefs->absoluteMouseMode = absoluteMouse;
+        prefs->quitAppAfter = quitAppAfter;
+
+        // Fixed flags from moonlightStreamArgs, identical on every
+        // subprocess launch. Window mode is irrelevant in scene mode but
+        // set for parity.
+        prefs->windowMode = StreamingPreferences::WM_FULLSCREEN_DESKTOP;
+        prefs->framePacing = true;
+        prefs->enableVsync = true;
         prefs->enableHdr = false;
-        prefs->absoluteMouseMode = true;
-        prefs->quitAppAfter = true;
+        prefs->keepAwake = true;
+        prefs->showPerformanceOverlay = false;
 
         if (m_Launcher != nullptr) {
             m_Launcher->deleteLater();
         }
-        m_Launcher = new CliStartStream::Launcher(
-            QStringLiteral("10.10.100.12"),
-            QStringLiteral("rupelmonde-castle-viewer"),
-            prefs, false, this);
+        m_Launcher = new CliStartStream::Launcher(host, app, prefs, false, this);
         return m_Launcher;
     }
 
