@@ -30,9 +30,10 @@ can pass `--headless` unconditionally without a version-gated path.
 
 Phase 2 — hosting the stream inside the kiosk process and removing
 the stream subprocess entirely — is tracked on
-issues.experiencenet.com **#111**. Until then, each tile-tap still
-produces exactly one stream-subprocess window transition (the kiosk
-hide + stream show); the pair-subprocess window transition is gone.
+issues.experiencenet.com **#111**. DELIVERED FOR LINUX by scene mode
+(issue #507, see the Scene mode section below): Linux tile-taps stream
+in process with zero window transitions. On macOS each tile-tap still
+produces one stream-subprocess window transition until #507 Phase 2.
 
 ## Kiosk loading screen (tile tap to first frame)
 
