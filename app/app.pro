@@ -250,6 +250,7 @@ ffmpeg {
     SOURCES += \
         streaming/video/ffmpeg.cpp \
         streaming/video/videoitem.cpp \
+        streaming/input/quickinput.cpp \
         streaming/video/ffmpeg-renderers/genhwaccel.cpp \
         streaming/video/ffmpeg-renderers/quicksink.cpp \
         streaming/video/ffmpeg-renderers/sdlvid.cpp \
@@ -259,6 +260,7 @@ ffmpeg {
     HEADERS += \
         streaming/video/ffmpeg.h \
         streaming/video/videoitem.h \
+        streaming/input/quickinput.h \
         streaming/video/ffmpeg-renderers/renderer.h \
         streaming/video/ffmpeg-renderers/genhwaccel.h \
         streaming/video/ffmpeg-renderers/quicksink.h \

@@ -27,6 +27,13 @@ Item {
         // the veil forever, so a timer backstop drops it shortly after
         // the connection is up.
         veilFallbackTimer.start()
+
+        // Input goes live with the connection (issue #507 M3): the
+        // VideoItem takes keyboard focus, starts forwarding pointer and
+        // key events to the host, and hides the local cursor so only
+        // the host cursor is visible.
+        videoItem.streamActive = true
+        videoItem.forceActiveFocus()
     }
 
     function displayLaunchError(text) {
@@ -36,12 +43,18 @@ Item {
     function quitStarting() {
         // The host app is being quit (quitAppAfter is on for the kiosk).
         // Raise the veil again until sessionFinished pops the page.
+        // Dropping streamActive raises all keys, cancels active pointers
+        // and restores the local cursor.
+        videoItem.streamActive = false
         veilFallbackTimer.stop()
         firstFrameSeen = false
         stageLabel.text = qsTr("Ending experience")
     }
 
     function sessionFinished(portTestResult) {
+        // Stream input ends with the session
+        videoItem.streamActive = false
+
         // Re-enable GUI gamepad usage now
         SdlGamepadKeyNavigation.enable()
 
@@ -59,6 +72,11 @@ Item {
     }
 
     StackView.onDeactivating: {
+        // Release stream input and keyboard focus, and restore the local
+        // cursor, before the page leaves the stack
+        videoItem.streamActive = false
+        videoItem.focus = false
+
         // Show the toolbar again when popped off the stack
         toolBar.visible = true
 
@@ -115,6 +133,13 @@ Item {
         id: videoItem
         anchors.fill: parent
 
+        // Ctrl+Alt+Shift+Q parity with the SDL path's quit combo
+        onQuitRequested: {
+            if (session !== null) {
+                session.stopSession()
+            }
+        }
+
         Component.onCompleted: {
             // M1 contract: VideoItem may expose a firstFrameReceived()
             // signal. Connect defensively so this page also works with a
@@ -164,8 +189,10 @@ Item {
         }
     }
 
-    // TEMPORARY M1 exit control. M4 replaces this with the in-scene
-    // 3-dot handle and "Exit experience" menu.
+    // TEMPORARY M1 exit control, still the only exit path until M4 ships
+    // the in-scene 3-dot handle and "Exit experience" menu. It sits above
+    // the VideoItem, so taps and clicks land here first and are never
+    // forwarded to the host.
     Rectangle {
         id: exitButton
         anchors.top: parent.top
@@ -189,6 +216,13 @@ Item {
 
         MouseArea {
             anchors.fill: parent
+
+            // The VideoItem blanks the cursor while streaming (issue
+            // #507 review finding 1). Restore a visible arrow over the
+            // exit control so a mouse visitor can still find it.
+            hoverEnabled: true
+            cursorShape: Qt.ArrowCursor
+
             onClicked: {
                 if (session !== null) {
                     session.stopSession()

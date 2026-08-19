@@ -3,6 +3,7 @@
 #include "streaming/video/quicksinkbridge.h"
 #include "streaming/video/ffmpeg-renderers/renderer.h"
 #include "streaming/video/ffmpeg-renderers/quicksink.h"
+#include "streaming/input/quickinput.h"
 
 extern "C" {
 #include <libavutil/hwcontext.h>
@@ -13,6 +14,11 @@ extern "C" {
 #include <QOpenGLFunctions>
 #include <QOpenGLExtraFunctions>
 #include <QMatrix4x4>
+#include <QQuickWindow>
+#include <QMouseEvent>
+#include <QWheelEvent>
+#include <QTouchEvent>
+#include <QKeyEvent>
 
 // Sized single and dual channel texture formats. Core in desktop GL 3.0+
 // and GLES 3.0+, but not guaranteed to be in the headers we compile against.
@@ -1234,12 +1240,193 @@ private:
 
 VideoItem::VideoItem(QQuickItem* parent)
     : QQuickItem(parent)
+    , m_InputHandler(new QuickInputHandler(this))
 {
     setFlag(ItemHasContents, true);
+
+    // Input wiring (issue #507 M3): the item receives all mouse buttons
+    // and native touch events and forwards them to the input handler
+    // while streamActive is true. Hover events stay disabled: hover
+    // without buttons sends nothing in the touch model.
+    setAcceptedMouseButtons(Qt::AllButtons);
+    setAcceptTouchEvents(true);
+
+    connect(m_InputHandler, &QuickInputHandler::quitRequested,
+            this, &VideoItem::quitRequested);
 
     // Queued connection: frameReady() is emitted from the decoder thread
     connect(QuickSinkBridge::instance(), &QuickSinkBridge::frameReady,
             this, &VideoItem::onFrameReady, Qt::QueuedConnection);
+}
+
+VideoItem::~VideoItem()
+{
+    if (m_StreamActive) {
+        // The item is being torn down while the stream is (or may still
+        // be) live: Qt.quit() during a stream (the Hyprland Super+W
+        // path) destroys the scene without the page handlers running.
+        // Raise held keys and cancel active pointers; if the connection
+        // is already gone every LiSend* returns -2 harmlessly.
+        m_InputHandler->deactivate();
+    }
+}
+
+void VideoItem::setStreamActive(bool active)
+{
+    if (m_StreamActive == active) {
+        return;
+    }
+
+    m_StreamActive = active;
+
+    if (active) {
+        // Review finding 1: exactly one cursor visible during a stream,
+        // the host's. Items stacked above (the exit control) restore a
+        // visible cursor over their own area via cursorShape.
+        setCursor(Qt::BlankCursor);
+    }
+    else {
+        unsetCursor();
+
+        // Raise all keys and cancel active pointers so nothing sticks on
+        // the host across a stream end or a page pop
+        m_InputHandler->deactivate();
+    }
+
+    emit streamActiveChanged();
+}
+
+// Letterboxed video rectangle in item-local coordinates. This math must
+// stay identical to the letterbox block in VideoRenderNode::render()
+// above (scale = min of the axis ratios, centered), so pointer
+// normalization and rendered pixels agree exactly.
+QRectF VideoItem::videoRect() const
+{
+    if (m_FrameSize.isEmpty()) {
+        return QRectF();
+    }
+
+    const qreal itemW = width();
+    const qreal itemH = height();
+    if (itemW <= 0.0 || itemH <= 0.0) {
+        return QRectF();
+    }
+
+    const qreal scale = qMin(itemW / m_FrameSize.width(), itemH / m_FrameSize.height());
+    const qreal dstW = m_FrameSize.width() * scale;
+    const qreal dstH = m_FrameSize.height() * scale;
+    return QRectF((itemW - dstW) / 2.0, (itemH - dstH) / 2.0, dstW, dstH);
+}
+
+void VideoItem::mousePressEvent(QMouseEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    // Accept unconditionally so the implicit grab forms and we receive
+    // the move and release events of this interaction; the handler
+    // decides what (if anything) goes to the host.
+    event->accept();
+    m_InputHandler->handleMousePress(event, videoRect());
+}
+
+void VideoItem::mouseMoveEvent(QMouseEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    m_InputHandler->handleMouseMove(event, videoRect());
+}
+
+void VideoItem::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    m_InputHandler->handleMouseRelease(event, videoRect());
+}
+
+void VideoItem::mouseUngrabEvent()
+{
+    // The implicit grab was taken away mid-interaction (page transition,
+    // popup): cancel the synthetic pointer so the host does not keep a
+    // stuck touch
+    m_InputHandler->cancelMousePointer();
+    QQuickItem::mouseUngrabEvent();
+}
+
+void VideoItem::wheelEvent(QWheelEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    m_InputHandler->handleWheel(event, videoRect());
+}
+
+void VideoItem::touchEvent(QTouchEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    m_InputHandler->handleTouch(event, videoRect());
+}
+
+void VideoItem::touchUngrabEvent()
+{
+    m_InputHandler->cancelAllTouches();
+    QQuickItem::touchUngrabEvent();
+}
+
+void VideoItem::keyPressEvent(QKeyEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    event->accept();
+    m_InputHandler->handleKeyPress(event);
+}
+
+void VideoItem::keyReleaseEvent(QKeyEvent* event)
+{
+    if (!m_StreamActive) {
+        event->ignore();
+        return;
+    }
+
+    event->accept();
+    m_InputHandler->handleKeyRelease(event);
+}
+
+void VideoItem::itemChange(ItemChange change, const ItemChangeData& value)
+{
+    if (change == ItemSceneChange) {
+        // Track window deactivation so held keys and pointers are raised
+        // when the kiosk window loses focus mid-stream (alt-tab, Super+W
+        // choreography), mirroring SdlInputHandler's focus-loss handling
+        disconnect(m_WindowActiveConnection);
+        if (value.window != nullptr) {
+            m_WindowActiveConnection =
+                connect(value.window, &QWindow::activeChanged, this, [this]() {
+                    if (window() != nullptr && !window()->isActive() && m_StreamActive) {
+                        m_InputHandler->deactivate();
+                    }
+                });
+        }
+    }
+
+    QQuickItem::itemChange(change, value);
 }
 
 void VideoItem::onFrameReady()
@@ -1267,6 +1454,11 @@ QSGNode* VideoItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*)
     // Latch the newest frame. Ownership moves from the bridge to the node.
     AVFrame* frame = QuickSinkBridge::instance()->takeFrame();
     if (frame != nullptr) {
+        // Record the frame dimensions for videoRect() before ownership
+        // moves to the node. Safe: updatePaintNode() runs with the GUI
+        // thread blocked, and videoRect() is only read on the GUI thread.
+        m_FrameSize = QSize(frame->width, frame->height);
+
         node->submitFrame(frame);
     }
 
