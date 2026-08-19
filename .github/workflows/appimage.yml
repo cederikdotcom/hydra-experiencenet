@@ -30,6 +30,10 @@ jobs:
   appimage:
     name: Build Linux AppImage
     runs-on: ubuntu-24.04
+    # GitHub-hosted infra has hung this job twice in apt and once in the Qt
+    # mirror download; a hard ceiling turns silent stalls into visible
+    # failures a rerun can fix.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
