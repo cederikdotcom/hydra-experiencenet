@@ -1330,6 +1330,15 @@ void Session::getWindowDimensions(int& x, int& y,
         displayIndex = SDL_GetWindowDisplayIndex(m_Window);
         SDL_assert(displayIndex >= 0);
     }
+    // An explicit --display-index wins over following the Qt UI's display,
+    // but only when that display actually exists right now.
+    else if (m_Preferences->displayIndex >= 0 &&
+             m_Preferences->displayIndex < SDL_GetNumVideoDisplays()) {
+        displayIndex = m_Preferences->displayIndex;
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                    "Using explicit display index %d",
+                    displayIndex);
+    }
     // Create our window on the same display that Qt's UI
     // was being displayed on.
     else {

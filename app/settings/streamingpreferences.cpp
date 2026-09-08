@@ -107,6 +107,8 @@ void StreamingPreferences::reload()
 
     int defaultVer = settings.value(SER_DEFAULTVER, 0).toInt();
 
+    displayIndex = -1;
+
 #ifdef Q_OS_DARWIN
     recommendedFullScreenMode = WindowMode::WM_FULLSCREEN_DESKTOP;
 #else

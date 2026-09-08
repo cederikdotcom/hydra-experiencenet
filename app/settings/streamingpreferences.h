@@ -184,6 +184,10 @@ public:
     VideoDecoderSelection videoDecoderSelection;
     WindowMode windowMode;
     WindowMode recommendedFullScreenMode;
+    // SDL display index for initial stream window placement.
+    // CLI-only (--display-index), never persisted; -1 = pick the
+    // display the Qt UI is on (legacy behavior).
+    int displayIndex;
     UIDisplayMode uiDisplayMode;
     Language language;
     CaptureSysKeysMode captureSysKeysMode;

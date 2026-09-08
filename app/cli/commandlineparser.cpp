@@ -363,6 +363,7 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     parser.addValueOption("bitrate", "bitrate in Kbps");
     parser.addValueOption("packet-size", "video packet size");
     parser.addChoiceOption("display-mode", "display mode", m_WindowModeMap.keys());
+    parser.addValueOption("display-index", "SDL display index to open the stream window on");
     parser.addChoiceOption("audio-config", "audio config", m_AudioConfigMap.keys());
     parser.addToggleOption("multi-controller", "multiple controller support");
     parser.addToggleOption("quit-after", "quit app after session");
@@ -446,6 +447,14 @@ void StreamCommandLineParser::parse(const QStringList &args, StreamingPreference
     // Resolve --display option
     if (parser.isSet("display-mode")) {
         preferences->windowMode = mapValue(m_WindowModeMap, parser.getChoiceOptionValue("display-mode"));
+    }
+
+    // Resolve --display-index option
+    if (parser.isSet("display-index")) {
+        preferences->displayIndex = parser.getIntOption("display-index");
+        if (preferences->displayIndex < 0) {
+            parser.showError("Display index must be 0 or greater");
+        }
     }
 
     // Resolve --vsync and --no-vsync options
