@@ -1410,6 +1410,20 @@ void Session::getWindowDimensions(int& x, int& y,
         height = m_StreamConfig.height;
     }
 
+    // When an explicit display index targets a secondary display, macOS
+    // SDL_WINDOW_FULLSCREEN_DESKTOP does not reliably grow a window created at
+    // the stream resolution up to fill that display -- it stays stream-sized
+    // and centered, leaving a small window on a large screen. Size the window
+    // to the full display bounds so the borderless kiosk window covers the
+    // whole screen; the video is scaled to fit. Issue #674.
+    if (m_Preferences->displayIndex >= 0 && m_IsFullScreen) {
+        SDL_Rect fullBounds;
+        if (SDL_GetDisplayBounds(displayIndex, &fullBounds) == 0) {
+            width = fullBounds.w;
+            height = fullBounds.h;
+        }
+    }
+
     x = y = SDL_WINDOWPOS_CENTERED_DISPLAY(displayIndex);
 }
 
