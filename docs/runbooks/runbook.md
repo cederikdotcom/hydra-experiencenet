@@ -122,6 +122,18 @@ Do not switch the stream to `--display-mode fullscreen` (true macOS
 fullscreen): that creates a new Space and the exit overlay window does
 not follow into it.
 
+### Second-screen placement (v6.1.38+, issue #674)
+
+The stream subcommand accepts `--display-index <n>` to open the stream
+window on a specific SDL display instead of the one the Qt UI is on.
+With borderless mode the stream then fills that display, e.g. a venue
+big screen on a two-display Mac Mini while the kiosk grid stays on the
+operator display. The value is CLI-only and never persisted. An index
+that is negative errors at parse time; an index for a display that is
+not connected at launch falls back to the legacy placement.
+hydraheadflatscreen v2.2.5+ passes the flag from its `display_index`
+config key.
+
 ## Help button (kiosk header)
 
 A "?" button sits in the top-right of the kiosk header (after the venue badge). Tapping it opens a modal dialog with two tabs of content.
