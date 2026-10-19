@@ -411,3 +411,9 @@ afterward. Offline heads receive the published version through their updater.
 For visual acceptance, verify the badge offline, in portrait and landscape, and
 through loading, empty catalog, start/error/retry and Linux first-frame transitions.
 Confirm experience tiles and Help still work and the veil disappears on video.
+
+The populated catalog also uses the bundled logo as a subdued footer beneath
+the tiles (6.1.41). It sits near the bottom of a short catalog and scrolls after
+the final row of a longer catalog. Check both orientations, tile selection,
+scrolling and the empty state. The footer has no input handler, and the grid is
+clipped to keep scrolling content inside the catalog area.

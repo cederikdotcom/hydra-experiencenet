@@ -688,8 +688,27 @@ Item {
         cellWidth: 230
         cellHeight: 160
         focus: true
+        clip: true
 
         model: experiences.length
+
+        footer: Item {
+            width: experienceGrid.width
+            height: experienceGrid.count === 0 ? 0 : Math.max(
+                catalogBrand.height + 48,
+                experienceGrid.height - Math.ceil(experienceGrid.count /
+                    Math.max(1, Math.floor(experienceGrid.width / experienceGrid.cellWidth))) * experienceGrid.cellHeight)
+            visible: experienceGrid.count > 0
+
+            ExperienceNetBrand {
+                id: catalogBrand
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 24
+                badgeSize: kioskRoot.waitingBadgeSize
+                opacity: 0.5
+            }
+        }
 
         delegate: Item {
             width: 220
