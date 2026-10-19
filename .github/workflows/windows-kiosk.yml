@@ -1,0 +1,28 @@
+name: Windows kiosk portable
+on:
+  push:
+    branches: [fix/windows-kiosk-build]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.10.2
+          arch: win64_msvc2022_64
+          cache: true
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5
+      - name: Build and deploy Windows kiosk
+        shell: cmd
+        run: scripts\build-windows-portable.cmd
+      - uses: actions/upload-artifact@v5
+        with:
+          name: HydraExperienceNet-Windows-x64
+          path: build/HydraExperienceNet-Windows-x64.zip
+          if-no-files-found: error
