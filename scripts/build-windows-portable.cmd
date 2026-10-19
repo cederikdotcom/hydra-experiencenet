@@ -2,11 +2,18 @@
 setlocal enableextensions
 cd /d "%~dp0.."
 set "SOURCE_ROOT=%CD%"
+if defined CI_VERSION (
+    powershell -NoProfile -NonInteractive -Command "$v=$env:CI_VERSION -replace '^v',''; if($v -notmatch '^\d+\.\d+\.\d+$'){throw 'Expected release version vX.Y.Z'}; [IO.File]::WriteAllText('app/version.txt',$v)"
+    if errorlevel 1 exit /b 1
+)
 for /f "usebackq delims=" %%i in (`scripts\vswhere.exe -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvarsall.bat" AMD64
 if errorlevel 1 exit /b 1
 for /f "usebackq delims=" %%i in (`scripts\vswhere.exe -latest -find VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT`) do set "VC_REDIST_DLL_PATH=%%i"
-if not exist build\windows-kiosk mkdir build\windows-kiosk
-if not exist build\windows-kiosk-deploy mkdir build\windows-kiosk-deploy
+if exist build\windows-kiosk rmdir /s /q build\windows-kiosk
+if exist build\windows-kiosk-deploy rmdir /s /q build\windows-kiosk-deploy
+if exist build\HydraExperienceNet-Windows-x64.zip del build\HydraExperienceNet-Windows-x64.zip
+mkdir build\windows-kiosk
+mkdir build\windows-kiosk-deploy
 pushd build\windows-kiosk
 qmake "%SOURCE_ROOT%\moonlight-qt.pro" CONFIG+=release
 if errorlevel 1 exit /b 1

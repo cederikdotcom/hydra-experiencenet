@@ -1,13 +1,22 @@
 name: Windows kiosk portable
 on:
   push:
-    branches: [fix/windows-kiosk-build]
+    branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+        default: ''
 permissions:
   contents: read
 jobs:
   build:
     runs-on: windows-2025
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
         with:
@@ -21,6 +30,19 @@ jobs:
       - name: Build and deploy Windows kiosk
         shell: cmd
         run: scripts\build-windows-portable.cmd
+        env:
+          CI_VERSION: ${{ inputs.version }}
+      - name: Verify packaged executable version
+        if: inputs.version != ''
+        shell: pwsh
+        env:
+          CI_VERSION: ${{ inputs.version }}
+        run: |
+          $expected = $env:CI_VERSION -replace '^v', ''
+          $actual = (Get-Item build/windows-kiosk-deploy/HydraExperienceNet.exe).VersionInfo.ProductVersion
+          if ($actual -ne $expected -and $actual -ne "$expected.0") {
+            throw "Packaged version $actual does not match $expected"
+          }
       - uses: actions/upload-artifact@v5
         with:
           name: HydraExperienceNet-Windows-x64
