@@ -403,7 +403,11 @@ including the Linux in-process stream loading veil. No image download is require
 The Go `hydraheadflatscreen` agent has no waiting-screen renderer; ship this change
 through the Qt application's normal release lane.
 
-Native build and display checks are pending. Verify the badge with the network
-disconnected, in portrait and landscape, and through loading, empty catalog,
-start/error/retry and Linux first-frame transitions. Confirm experience tiles and
-Help still work, and that the waiting veil disappears when video starts.
+Released as **6.1.40** on 2026-10-19. Native macOS and Linux release builds passed.
+The production DMG and AppImage are published. The built-in updater installed
+6.1.40 on cheeky-cactus-86 and peppy-dumpling-32; both kiosks were running and idle
+afterward. Offline heads receive the published version through their updater.
+
+For visual acceptance, verify the badge offline, in portrait and landscape, and
+through loading, empty catalog, start/error/retry and Linux first-frame transitions.
+Confirm experience tiles and Help still work and the veil disappears on video.
