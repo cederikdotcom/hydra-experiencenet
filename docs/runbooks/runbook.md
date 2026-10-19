@@ -276,6 +276,34 @@ For DMG distribution:
 ./scripts/generate-dmg.sh Release
 ```
 
+## Windows x64 kiosk package
+
+From v6.1.42, tagged releases include
+`HydraExperienceNet-v<X.Y.Z>-windows-x64.zip` alongside the macOS DMG.
+The Windows portable workflow builds the existing Qt kiosk with its DLLs and
+Qt runtime, and release builds embed the tag version. `SHA256SUMS` accompanies
+the assets on GitHub and the release server. For example:
+
+```text
+https://releases.experiencenet.com/hydraexperiencenet/production/v6.1.42/HydraExperienceNet-v6.1.42-windows-x64.zip
+```
+
+Extract into `C:\HydraExperienceNet` and run `HydraExperienceNet.exe kiosk`
+as the logged-in console user. It reads the HydraHead catalog/launch API on
+`127.0.0.1:9740` and serves the menu/overlay API on `127.0.0.1:9741`.
+Local-game entries remain in the head's `local_apps` configuration.
+
+The Windows HydraHead v2.4.0 agent does not automatically install or supervise
+this UI; the ZIP is not a complete head installer. On the Lunar Strike node,
+the `HydraHeadKiosk` logon task supervises it separately. The operator verified
+menu → local Lunar Strike 22744 → game Exit → menu → relaunch. Use the game's
+save/quit flow when progress matters: the Hydra overlay's **Exit experience**
+calls the agent stop command and does not save the game.
+
+Build locally from a Qt 6.10.2 MSVC x64 environment with Visual Studio:
+`scripts\build-windows-portable.cmd`. Set `CI_VERSION=vX.Y.Z` to embed a release
+version; without it, the build uses `app/version.txt`.
+
 ## Downloading a released DMG
 
 The release server's URL scheme for this project is **version-prefixed** on

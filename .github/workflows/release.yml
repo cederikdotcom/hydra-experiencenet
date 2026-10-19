@@ -8,6 +8,11 @@ on:
     tags: ['v*']
 
 jobs:
+  build-windows:
+    uses: ./.github/workflows/windows-kiosk.yml
+    with:
+      version: ${{ github.ref_name }}
+
   build-macos:
     runs-on: macos-15
 
@@ -39,31 +44,58 @@ jobs:
         env:
           CI_VERSION: ${{ steps.get_version.outputs.version }}
 
+      - name: Upload macOS release artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: HydraExperienceNet-macOS
+          path: build/installer-Release/*.dmg
+          if-no-files-found: error
+
+  publish:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Name Windows package and create checksums
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mv release/HydraExperienceNet-Windows-x64.zip "release/HydraExperienceNet-${VERSION}-windows-x64.zip"
+          cd release
+          sha256sum *.dmg *.zip > SHA256SUMS
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: build/installer-Release/*.dmg
+          files: release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to release server
         env:
           HYDRARELEASE_TOKEN: ${{ secrets.HYDRARELEASE_PUBLISH_TOKEN }}
+          VERSION: ${{ github.ref_name }}
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
+          set -euo pipefail
           SERVER="https://releases.experiencenet.com"
           PROJECT="hydraexperiencenet"
           CHANNEL="production"
 
-          DMG_FILE=$(ls build/installer-Release/*.dmg)
-          NAME=$(basename "$DMG_FILE")
-          echo "Uploading $NAME..."
-          curl -sf -X POST \
-            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
-            -H "Content-Type: application/octet-stream" \
-            --data-binary @"$DMG_FILE" \
-            "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/$VERSION/$NAME"
+          for FILE in release/*; do
+            NAME=$(basename "$FILE")
+            echo "Uploading $NAME..."
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$FILE" \
+              "$SERVER/api/v1/publish/$PROJECT/$CHANNEL/$VERSION/$NAME"
+          done
 
           echo "Finalizing..."
           curl -sf -X POST \
