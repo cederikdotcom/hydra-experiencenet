@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file>res/experiencenet-mark.png</file>
         <file>res/qr_issue.svg</file>
         <file>res/qr_phone.svg</file>
         <file>res/ic_videogame_asset_white_48px.svg</file>

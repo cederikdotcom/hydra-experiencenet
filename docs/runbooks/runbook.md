@@ -393,3 +393,17 @@ Issue #507's program. On Linux kiosk heads the tile tap streams IN PROCESS: Sess
 Status as of 2026-08-20: M1 through M3 implemented, owner-validated on the omarchy head (touch works, stream smooth, one OS window, no stream subprocess). M4 (agent-driven stream params replacing the hardcoded test target, in-scene 3-dot overlay) and M5 (hardening, soak, Wayland experiment) remain: see issue #507 for the full log, acceptance evidence, and the M1 warm-process launcher fixes that also affect the CLI paths (ComputerSeeker and CliStartStream now handle already-online computers and pre-populated app lists).
 
 Body-side gotcha rediscovered during M3 acceptance: duplicate Virtual Display Driver instances on a body break absolute input injection (issue #428): taps land offset while drags work. Check Get-PnpDevice -Class Display on the body before debugging the head.
+
+## Waiting screen branding
+
+The flatscreen kiosk bundles the Samsung receiver's mark as
+`app/res/experiencenet-mark.png`. `ExperienceNetBrand.qml` supplies the white badge
+and experiencenet wordmark for loading, starting, error and empty-catalog screens,
+including the Linux in-process stream loading veil. No image download is required.
+The Go `hydraheadflatscreen` agent has no waiting-screen renderer; ship this change
+through the Qt application's normal release lane.
+
+Native build and display checks are pending. Verify the badge with the network
+disconnected, in portrait and landscape, and through loading, empty catalog,
+start/error/retry and Linux first-frame transitions. Confirm experience tiles and
+Help still work, and that the waiting veil disappears when video starts.

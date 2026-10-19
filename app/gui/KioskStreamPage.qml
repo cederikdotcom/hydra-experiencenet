@@ -220,13 +220,18 @@ Item {
     // again while the host app is quitting on the way out.
     Rectangle {
         anchors.fill: parent
-        color: "#0a0a0a"
+        color: "#000000"
         visible: !firstFrameSeen
         z: 5
 
         Column {
             anchors.centerIn: parent
             spacing: 20
+
+            ExperienceNetBrand {
+                anchors.horizontalCenter: parent.horizontalCenter
+                badgeSize: Math.min(kioskStreamPage.width, kioskStreamPage.height) * 0.18
+            }
 
             BusyIndicator {
                 anchors.horizontalCenter: parent.horizontalCenter

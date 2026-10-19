@@ -29,6 +29,7 @@ Item {
     property string issueFiledUrl: ""
     property string issueFilingError: ""
     property string agentVersion: ""
+    readonly property real waitingBadgeSize: Math.min(width, height) * 0.18
 
     StackView.onActivated: {
         toolBar.visible = false
@@ -424,7 +425,7 @@ Item {
     // Background
     Rectangle {
         anchors.fill: parent
-        color: "#0a0a0a"
+        color: "#000000"
     }
 
     // Header
@@ -567,6 +568,11 @@ Item {
         spacing: 16
         visible: loading && !streaming
 
+        ExperienceNetBrand {
+            anchors.horizontalCenter: parent.horizontalCenter
+            badgeSize: kioskRoot.waitingBadgeSize
+        }
+
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
             running: visible
@@ -588,6 +594,11 @@ Item {
         anchors.centerIn: parent
         spacing: 16
         visible: streaming
+
+        ExperienceNetBrand {
+            anchors.horizontalCenter: parent.horizontalCenter
+            badgeSize: kioskRoot.waitingBadgeSize
+        }
 
         BusyIndicator {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -618,6 +629,11 @@ Item {
         anchors.centerIn: parent
         spacing: 16
         visible: errorMessage !== "" && !loading && !streaming
+
+        ExperienceNetBrand {
+            anchors.horizontalCenter: parent.horizontalCenter
+            badgeSize: kioskRoot.waitingBadgeSize
+        }
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -720,13 +736,23 @@ Item {
         }
 
         // Empty state
-        Text {
+        Column {
             anchors.centerIn: parent
             visible: experienceGrid.count === 0
-            text: qsTr("No experiences available")
-            color: "#a1a1aa"
-            font.pixelSize: 20
-            font.family: ""
+            spacing: 16
+
+            ExperienceNetBrand {
+                anchors.horizontalCenter: parent.horizontalCenter
+                badgeSize: kioskRoot.waitingBadgeSize
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("No experiences available")
+                color: "#b9b9b9"
+                font.pixelSize: 20
+                font.family: ""
+            }
         }
 
         ScrollBar.vertical: ScrollBar {}
