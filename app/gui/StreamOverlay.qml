@@ -36,7 +36,8 @@ Window {
     x:      collapsedX
     y:      collapsedY
 
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus
+    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool |
+           (pinPrompt.visible ? 0 : Qt.WindowDoesNotAcceptFocus)
     color: "transparent"
     visible: false
 
@@ -55,18 +56,54 @@ Window {
 
     property bool quitting: false
 
-    onQuittingChanged: {
-        if (quitting) {
-            streamOverlayWindow.width  = Screen.width
-            streamOverlayWindow.height = Screen.height
-            streamOverlayWindow.x      = 0
-            streamOverlayWindow.y      = 0
-        } else {
-            streamOverlayWindow.width  = collapsedWidth
-            streamOverlayWindow.height = collapsedHeight
-            streamOverlayWindow.x      = collapsedX
-            streamOverlayWindow.y      = collapsedY
+    Connections {
+        target: typeof localServerBridge !== "undefined" ? localServerBridge : null
+        function onKioskWindowShown() {
+            pinPrompt.dismiss()
+            collapseTimer.stop()
+            streamOverlayWindow.quitting = false
+            exitDropdown.visible = false
+            streamOverlayWindow.updateGeometry()
         }
+    }
+
+    function updateGeometry() {
+        var expanded = quitting || pinPrompt.visible
+        width = expanded ? Screen.width : collapsedWidth
+        height = expanded ? Screen.height : collapsedHeight
+        x = Screen.virtualX + (expanded ? 0 : collapsedX)
+        y = Screen.virtualY + (expanded ? 0 : collapsedY)
+    }
+
+    onQuittingChanged: updateGeometry()
+
+    function exitExperience() {
+        quitting = true
+        collapseTimer.restart()
+        if (session !== null) {
+            session.triggerExitFromMenu()
+        } else {
+            var xhr = new XMLHttpRequest()
+            xhr.open("POST", "http://127.0.0.1:9740/api/v1/stream/stop", true)
+            xhr.send()
+        }
+    }
+
+    OperatorPinPrompt {
+        id: pinPrompt
+        anchors.fill: parent
+        z: 10
+        onVisibleChanged: {
+            streamOverlayWindow.updateGeometry()
+            if (visible) {
+                Qt.callLater(function() {
+                    streamOverlayWindow.raise()
+                    streamOverlayWindow.requestActivate()
+                    pinPrompt.focusInput()
+                })
+            }
+        }
+        onAuthorized: streamOverlayWindow.exitExperience()
     }
 
     // Fullscreen black veil shown during the exit transition.
@@ -88,7 +125,7 @@ Window {
 
     Rectangle {
         id: handleButton
-        visible: !streamOverlayWindow.quitting
+        visible: !streamOverlayWindow.quitting && !pinPrompt.visible
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         width: handleSize
@@ -146,17 +183,7 @@ Window {
             enabled: !streamOverlayWindow.quitting
             onClicked: {
                 exitDropdown.visible = false
-                if (streamOverlayWindow.session !== null) {
-                    streamOverlayWindow.quitting = true
-                    collapseTimer.restart()
-                    streamOverlayWindow.session.triggerExitFromMenu()
-                } else {
-                    var xhr = new XMLHttpRequest()
-                    xhr.open("POST", "http://127.0.0.1:9740/api/v1/stream/stop", true)
-                    xhr.send()
-                    streamOverlayWindow.quitting = true
-                    collapseTimer.restart()
-                }
+                pinPrompt.request()
             }
         }
     }

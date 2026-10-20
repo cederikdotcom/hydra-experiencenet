@@ -27,6 +27,30 @@ jobs:
           arch: win64_msvc2022_64
           cache: true
           aqtsource: git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5
+      - name: Test operator PIN verification
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`scripts\vswhere.exe -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvarsall.bat" AMD64
+          cd tests\operator-pin
+          qmake operator-pin.pro CONFIG+=release
+          if errorlevel 1 exit /b 1
+          ..\..\scripts\jom.exe release
+          if errorlevel 1 exit /b 1
+          release\operator-pin-test.exe
+          if errorlevel 1 exit /b 1
+      - name: Test session input and synthetic keep-awake filtering
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`scripts\vswhere.exe -latest -property installationPath`) do call "%%i\VC\Auxiliary\Build\vcvarsall.bat" AMD64
+          cd tests\session-input
+          qmake session-input.pro CONFIG+=release
+          if errorlevel 1 exit /b 1
+          ..\..\scripts\jom.exe release
+          if errorlevel 1 exit /b 1
+          release\session-input-test.exe -o session-input-results.txt,txt
+          set INPUT_TEST_EXIT=%ERRORLEVEL%
+          type session-input-results.txt
+          if not "%INPUT_TEST_EXIT%"=="0" exit /b %INPUT_TEST_EXIT%
       - name: Build and deploy Windows kiosk
         shell: cmd
         run: scripts\build-windows-portable.cmd

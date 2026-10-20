@@ -9,7 +9,6 @@
 #include <QWindow>
 #include <SDL_log.h>
 
-
 LocalServer::LocalServer(QObject* parent)
     : QObject(parent),
       m_server(new QTcpServer(this))
@@ -83,9 +82,33 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
         handleWindowShow(socket);
     } else if (method == "POST" && path == "/api/v1/overlay/show") {
         handleOverlayShow(socket);
+    } else if (method == "GET" && path == "/api/v1/input/idle") {
+        handleInputIdle(socket);
     } else {
         sendError(socket, 404, "Not Found");
     }
+}
+
+void LocalServer::handleInputIdle(QTcpSocket* socket)
+{
+#ifdef Q_OS_WIN
+    // The Go agent runs in session 0. Sample here, in the player's session,
+    // even while this window is hidden behind a locally running game.
+    quint64 idleMs, ignored, events;
+    quint32 sessionId;
+    if (!m_input.sample(idleMs, ignored, events, sessionId)) {
+        sendError(socket, 503, "Input activity unavailable");
+        return;
+    }
+    QByteArray body = "{\"supported\":true,\"idle_ms\":" +
+        QByteArray::number(idleMs) + ",\"session_id\":" + QByteArray::number(sessionId) +
+        ",\"activity_events\":" + QByteArray::number(events) +
+        ",\"ignored_keep_awake\":" + QByteArray::number(ignored) + "}";
+    sendResponse(socket, 200, "application/json", body);
+#else
+    // Do not substitute Qt window events: those miss input to local games.
+    sendResponse(socket, 200, "application/json", "{\"supported\":false}");
+#endif
 }
 
 // Note: the /api/v1/screenshot endpoint and its handleScreenshot()
@@ -139,6 +162,8 @@ void LocalServer::handleWindowHide(QTcpSocket* socket)
 
 void LocalServer::handleWindowShow(QTcpSocket* socket)
 {
+    // Agent-driven returns (including inactivity) must clear stale exit UI.
+    emit kioskWindowShown();
     QWindowList windows = QGuiApplication::topLevelWindows();
     for (QWindow* window : windows) {
         // Tool windows (our exit overlay) stay where they are —
