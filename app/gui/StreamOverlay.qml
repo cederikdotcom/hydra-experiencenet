@@ -23,7 +23,7 @@ Window {
 
     property Session session: null
     property int handleSize: 40
-    property int menuHeight: 52
+    property int menuHeight: KioskBridge.operatorPowerAvailable() ? 156 : 52
     property int menuWidth: 220
 
     readonly property int collapsedWidth:  menuWidth
@@ -51,14 +51,17 @@ Window {
         repeat: false
         onTriggered: {
             streamOverlayWindow.quitting = false
+            streamOverlayWindow.powerAction = ""
         }
     }
 
     property bool quitting: false
+    property string powerAction: ""
 
     Connections {
         target: typeof localServerBridge !== "undefined" ? localServerBridge : null
         function onKioskWindowShown() {
+            if (streamOverlayWindow.powerAction !== "" || pinPrompt.submitting) return
             pinPrompt.dismiss()
             collapseTimer.stop()
             streamOverlayWindow.quitting = false
@@ -79,6 +82,7 @@ Window {
 
     function exitExperience() {
         quitting = true
+        collapseTimer.interval = 1500
         collapseTimer.restart()
         if (session !== null) {
             session.triggerExitFromMenu()
@@ -104,6 +108,12 @@ Window {
             }
         }
         onAuthorized: streamOverlayWindow.exitExperience()
+        onPowerScheduled: function(action) {
+            streamOverlayWindow.powerAction = action
+            streamOverlayWindow.quitting = true
+            collapseTimer.interval = 20000
+            collapseTimer.restart()
+        }
     }
 
     // Fullscreen black veil shown during the exit transition.
@@ -117,7 +127,8 @@ Window {
 
         Text {
             anchors.centerIn: parent
-            text: qsTr("Quitting experience")
+            text: streamOverlayWindow.powerAction === "restart" ? qsTr("Restarting…") :
+                  streamOverlayWindow.powerAction === "shutdown" ? qsTr("Shutting down…") : qsTr("Quitting experience")
             color: "#ffffff"
             font.pixelSize: 22
         }
@@ -163,27 +174,40 @@ Window {
         anchors.horizontalCenter: parent.horizontalCenter
         width: menuWidth
         height: menuHeight
-        color: exitArea.containsMouse ? "#E0000000" : "#CC000000"
+        color: "#EE111111"
         radius: 10
         border.color: "#FFFFFFFF"
         border.width: 1
 
-        Text {
-            anchors.centerIn: parent
-            text: qsTr("Exit experience")
-            color: "white"
-            font.pixelSize: 18
-        }
-
-        MouseArea {
-            id: exitArea
+        Column {
             anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            enabled: !streamOverlayWindow.quitting
-            onClicked: {
-                exitDropdown.visible = false
-                pinPrompt.request()
+            Repeater {
+                model: KioskBridge.operatorPowerAvailable() ? ["exit", "restart", "shutdown"] : ["exit"]
+                delegate: Rectangle {
+                    width: menuWidth
+                    height: 52
+                    color: actionArea.containsMouse ? "#444444" : "transparent"
+                    radius: 10
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData === "restart" ? qsTr("Restart…") :
+                              modelData === "shutdown" ? qsTr("Shut down…") : qsTr("Exit experience")
+                        color: "white"
+                        font.pixelSize: 18
+                    }
+                    MouseArea {
+                        id: actionArea
+                        objectName: "operatorAction_" + modelData
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        enabled: !streamOverlayWindow.quitting
+                        onClicked: {
+                            exitDropdown.visible = false
+                            pinPrompt.requestAction(modelData)
+                        }
+                    }
+                }
             }
         }
     }

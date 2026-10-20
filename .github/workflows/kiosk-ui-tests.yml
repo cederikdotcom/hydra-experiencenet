@@ -1,0 +1,23 @@
+name: Kiosk UI behavior
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  qml:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install PySide6-Essentials==6.10.2
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
+      - name: Exercise real PIN overlay and head recovery
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python tests/operator-pin/test_qml.py
+          python tests/operator-pin/test_power_recovery.py
