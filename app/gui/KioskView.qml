@@ -112,26 +112,24 @@ Item {
         xhr.send(JSON.stringify(body))
     }
 
-    function fetchConfig() {
-        fetchData("http://localhost:9740/api/v1/config", function(data) {
-            if (data.district) configDistrict = data.district
-            if (data.venue) configVenue = data.venue
-            fetchExperiences()
-        })
+    KioskCatalogLoader {
+        id: catalogLoader
+        onLoadStarted: { kioskRoot.loading = true; kioskRoot.errorMessage = "" }
+        onUnavailable: {
+            kioskRoot.loading = false
+            kioskRoot.errorMessage = qsTr("Waiting for HydraHead. Retrying automatically…")
+        }
+        onLoaded: function(items, district, venue) {
+            kioskRoot.experiences = items
+            kioskRoot.configDistrict = district
+            kioskRoot.configVenue = venue
+            kioskRoot.loading = false
+            kioskRoot.errorMessage = ""
+        }
     }
 
-    function fetchExperiences() {
-        loading = true
-        errorMessage = ""
-        fetchData("http://localhost:9740/api/v1/experiences", function(data) {
-            if (data && data.length !== undefined) {
-                experiences = data
-            } else {
-                experiences = []
-            }
-            loading = false
-        })
-    }
+    function fetchConfig() { catalogLoader.reload() }
+    function fetchExperiences() { catalogLoader.reload() }
 
     function runDiagnostics() {
         diagnosticsLoading = true

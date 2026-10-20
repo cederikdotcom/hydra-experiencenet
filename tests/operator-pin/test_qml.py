@@ -8,6 +8,8 @@ from PySide6.QtTest import QTest
 class Bridge(QObject):
     @Slot(result=bool)
     def operatorPinRequired(self): return True
+    @Slot(result=bool)
+    def operatorPowerAvailable(self): return True
     @Slot(str,result=bool)
     def verifyOperatorPin(self,pin): return pin=='4826'
     @Slot(QObject)

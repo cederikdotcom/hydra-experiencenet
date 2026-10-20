@@ -40,6 +40,13 @@ public:
     // Provisioned by the operator, outside the application package. Cache the
     // enabled state so deleting/unreading the file cannot unlock a live kiosk.
     Q_INVOKABLE bool operatorPinRequired() const { return m_PinRequired; }
+    Q_INVOKABLE bool operatorPowerAvailable() const {
+#ifdef Q_OS_WIN
+        return m_PinRequired;
+#else
+        return false;
+#endif
+    }
     Q_INVOKABLE bool verifyOperatorPin(const QString& pin)
     {
         if (!m_PinRequired) return false;
