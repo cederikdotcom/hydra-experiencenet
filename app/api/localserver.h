@@ -11,6 +11,7 @@
 //   POST /api/v1/window/hide - hide the kiosk window (stream takes over display)
 //   POST /api/v1/window/show - show the kiosk window (stream ended)
 //   POST /api/v1/overlay/show - raise the exit overlay on top of an agent-initiated stream
+//   GET /api/v1/input/idle - session input age; HydraHead owns timeout policy
 class LocalServer : public QObject
 {
     Q_OBJECT
@@ -33,6 +34,7 @@ private:
     void handleWindowHide(QTcpSocket* socket);
     void handleWindowShow(QTcpSocket* socket);
     void handleOverlayShow(QTcpSocket* socket);
+    void handleInputIdle(QTcpSocket* socket);
     void sendResponse(QTcpSocket* socket, int statusCode, const QByteArray& contentType, const QByteArray& body);
     void sendError(QTcpSocket* socket, int statusCode, const QString& message);
 

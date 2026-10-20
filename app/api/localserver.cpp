@@ -9,6 +9,9 @@
 #include <QWindow>
 #include <SDL_log.h>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 LocalServer::LocalServer(QObject* parent)
     : QObject(parent),
@@ -83,9 +86,48 @@ void LocalServer::handleRequest(QTcpSocket* socket, const QByteArray& request)
         handleWindowShow(socket);
     } else if (method == "POST" && path == "/api/v1/overlay/show") {
         handleOverlayShow(socket);
+    } else if (method == "GET" && path == "/api/v1/input/idle") {
+        handleInputIdle(socket);
     } else {
         sendError(socket, 404, "Not Found");
     }
+}
+
+void LocalServer::handleInputIdle(QTcpSocket* socket)
+{
+#ifdef Q_OS_WIN
+    // The Go agent runs in session 0. Sample here, in the player's session,
+    // even while this window is hidden behind a locally running game.
+    LASTINPUTINFO input = {};
+    input.cbSize = sizeof(input);
+    DWORD sessionId;
+    if (!GetLastInputInfo(&input) ||
+        !ProcessIdToSessionId(GetCurrentProcessId(), &sessionId)) {
+        sendError(socket, 503, "Input activity unavailable");
+        return;
+    }
+    // DWORD subtraction handles the 49-day tick wrap. A future timestamp
+    // (possible with injected input) must never become a huge idle duration.
+    DWORD idleMs = GetTickCount() - input.dwTime;
+    if (idleMs > 0x7fffffffUL) {
+        sendError(socket, 503, "Input timestamp unavailable");
+        return;
+    }
+    // Holding a movement key or mouse button also counts as playing.
+    for (int key = 1; key < 256; ++key) {
+        if (GetAsyncKeyState(key) & 0x8000) {
+            idleMs = 0;
+            break;
+        }
+    }
+    QByteArray body = "{\"supported\":true,\"idle_ms\":" +
+        QByteArray::number(static_cast<qulonglong>(idleMs)) +
+        ",\"session_id\":" + QByteArray::number(static_cast<qulonglong>(sessionId)) + "}";
+    sendResponse(socket, 200, "application/json", body);
+#else
+    // Do not substitute Qt window events: those miss input to local games.
+    sendResponse(socket, 200, "application/json", "{\"supported\":false}");
+#endif
 }
 
 // Note: the /api/v1/screenshot endpoint and its handleScreenshot()
