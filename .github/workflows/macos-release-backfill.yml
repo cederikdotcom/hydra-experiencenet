@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           APP=build/build-Release/app/HydraExperienceNet.app
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "${RELEASE_TAG#v}"
-          lipo -verify_arch arm64 "$APP/Contents/MacOS/HydraExperienceNet"
+          lipo "$APP/Contents/MacOS/HydraExperienceNet" -verify_arch arm64
           python3 - <<'PY'
           import json, os, pathlib, subprocess
           manifest = {
