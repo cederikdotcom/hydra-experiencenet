@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QTimer>
 
 #ifdef __APPLE__
 #include "macos_permissions.h"
@@ -72,6 +73,45 @@ public:
 #ifdef __APPLE__
         WId id = window->winId();
         makeWindowFollowAllSpaces(static_cast<uint64_t>(id));
+#else
+        Q_UNUSED(window);
+#endif
+    }
+
+    // Main kiosk window only. Native Space changes can move AppKit's frame
+    // after showNormal/setGeometry have returned; keep the actual frame fitted
+    // while visible, and stop checking while the game owns the display.
+    Q_INVOKABLE void coverFullDisplay(QWindow* window)
+    {
+#ifdef __APPLE__
+        if (window == nullptr) return;
+        const auto fit = [window]() {
+            if (window->isVisible())
+                fitKioskWindowToScreen(static_cast<uint64_t>(window->winId()));
+        };
+        if (!window->findChild<QTimer*>(QStringLiteral("hydraKioskFrameGuard"),
+                                       Qt::FindDirectChildrenOnly)) {
+            QTimer* timer = new QTimer(window);
+            timer->setObjectName(QStringLiteral("hydraKioskFrameGuard"));
+            timer->setInterval(100);
+            QObject::connect(timer, &QTimer::timeout, window, fit);
+            QObject::connect(window, &QWindow::xChanged, window, [fit](int) { fit(); });
+            QObject::connect(window, &QWindow::yChanged, window, [fit](int) { fit(); });
+            QObject::connect(window, &QWindow::widthChanged, window, [fit](int) { fit(); });
+            QObject::connect(window, &QWindow::heightChanged, window, [fit](int) { fit(); });
+            QObject::connect(window, &QWindow::visibleChanged, window,
+                             [timer, fit](bool visible) {
+                if (visible) {
+                    fit();
+                    timer->start();
+                    QTimer::singleShot(0, timer, fit);
+                } else {
+                    timer->stop();
+                }
+            });
+            if (window->isVisible()) timer->start();
+        }
+        fit();
 #else
         Q_UNUSED(window);
 #endif

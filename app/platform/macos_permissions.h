@@ -41,6 +41,11 @@ void enableKioskPresentation();
 // macOS fullscreen Space. Pass the QWindow's winId() as windowId.
 void makeWindowFollowAllSpaces(uint64_t windowId);
 
+// Fit the visible native kiosk window to NSScreen.frame. Qt's cached geometry
+// can differ from the actual AppKit frame after leaving a game's fullscreen
+// Space. Hidden windows remain hidden; this is never used for the exit overlay.
+void fitKioskWindowToScreen(uint64_t windowId);
+
 // Captures the main display using ScreenCaptureKit (macOS 14+).
 // Captures everything including SDL Metal fullscreen content and across Spaces.
 // Returns a CGImageRef that the caller must release. Returns NULL on failure.

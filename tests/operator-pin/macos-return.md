@@ -36,3 +36,14 @@ the kiosk window and click its far bottom/right edges. Capture through Terminal
 afterward: only the grid should remain visible. Repeat after hide/show and
 after a local game returns. Do not mistake the 220×100 floating exit control
 for the main window.
+
+The v6.1.44 live regression caught a second case: the fixed size remained
+1920×1080 after Minecraft closed, but the native origin became (0,-20).
+The screenshot showed a 20-point desktop strip below the grid. Qt geometry
+alone did not detect/correct the native placement.
+
+The main window now fits the actual AppKit frame to `NSScreen.frame` on show,
+on Qt move/resize signals, and during a lightweight visible-only check. The
+check stops while hidden and never orders a hidden window in front of a game.
+The exit overlay does not use this guard. Repeat the full launch/normal-close
+cycle twice and inspect the native position as well as size after each return.

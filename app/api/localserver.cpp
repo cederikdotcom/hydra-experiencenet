@@ -190,6 +190,7 @@ void LocalServer::handleWindowShow(QTcpSocket* socket)
             }
             makeWindowFollowAllSpaces(static_cast<uint64_t>(window->winId()));
             window->show();
+            fitKioskWindowToScreen(static_cast<uint64_t>(window->winId()));
 #else
             window->showFullScreen();
 #endif
