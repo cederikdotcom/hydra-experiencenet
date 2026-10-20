@@ -13,6 +13,32 @@
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
 #include <dispatch/dispatch.h>
 
+void fitKioskWindowToScreen(uint64_t windowId)
+{
+    // A native frame change can synchronously notify Qt and re-enter via its
+    // move/resize signals. All callers run on the GUI thread.
+    static bool fitting = false;
+    if (fitting) return;
+    NSView* view = (__bridge NSView*)(void*)(uintptr_t)windowId;
+    NSWindow* window = view == nil ? nil : [view window];
+    if (window == nil || ![window isVisible]) {
+        return;
+    }
+    NSScreen* screen = [window screen] ?: [NSScreen mainScreen];
+    if (screen == nil) {
+        return;
+    }
+    // Read the native frame, not Qt's cached content geometry. On return from
+    // Minecraft the latter could be (0,0) while AppKit placed the frame at y=-20
+    // in top-left coordinates, exposing a strip along the bottom of the screen.
+    NSRect fullDisplay = [screen frame];
+    if (!NSEqualRects([window frame], fullDisplay)) {
+        fitting = true;
+        [window setFrame:fullDisplay display:YES];
+        fitting = false;
+    }
+}
+
 void makeWindowFollowAllSpaces(uint64_t windowId)
 {
     // winId() on macOS returns a pointer to the native NSView. The

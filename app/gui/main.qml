@@ -68,6 +68,7 @@ ApplicationWindow {
             window.width = Screen.width
             window.height = Screen.height
             KioskBridge.makeFollowAllSpaces(window)
+            KioskBridge.coverFullDisplay(window)
             window.raise()
             window.requestActivate()
             // Native window creation/placement can complete after showNormal.
