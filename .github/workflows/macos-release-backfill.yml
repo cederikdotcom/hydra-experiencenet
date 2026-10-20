@@ -1,0 +1,89 @@
+name: macOS release backfill
+
+# Build an existing immutable release tag when its normal Mac job is stuck.
+# This produces reviewable CI artifacts only; publication remains explicit.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag, for example v6.1.45'
+        required: true
+        type: string
+      runner:
+        description: 'Standard GitHub-hosted Mac runner'
+        required: true
+        type: choice
+        default: macos-15
+        options:
+          - macos-15
+          - macos-15-intel
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install create-dmg
+        run: |
+          brew install node
+          npm install --global create-dmg
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          version: 6.10.2
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@9edeb24ae65361fd032a063a0b0148764eff09c5'
+
+      - name: Build and Package
+        run: bash scripts/generate-dmg.sh Release
+        env:
+          CI_VERSION: ${{ inputs.release_tag }}
+
+      - name: Verify version and architecture; record provenance
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          BUILD_RUNNER: ${{ inputs.runner }}
+        run: |
+          set -euo pipefail
+          APP=build/build-Release/app/HydraExperienceNet.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "${RELEASE_TAG#v}"
+          lipo -verify_arch arm64 "$APP/Contents/MacOS/HydraExperienceNet"
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          manifest = {
+              "release_tag": os.environ["RELEASE_TAG"],
+              "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "workflow_commit": os.environ["GITHUB_SHA"],
+              "runner": os.environ["BUILD_RUNNER"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "architecture": "arm64",
+          }
+          pathlib.Path("build/installer-Release/provenance.json").write_text(json.dumps(manifest, indent=2) + "\n")
+          PY
+          cd build/installer-Release
+          shasum -a 256 *.dmg > SHA256SUMS
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: HydraExperienceNet-macOS-backfill
+          path: |
+            build/installer-Release/*.dmg
+            build/installer-Release/SHA256SUMS
+            build/installer-Release/provenance.json
+          if-no-files-found: error
