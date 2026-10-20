@@ -15,12 +15,18 @@ private slots:
         quint32 session = 0;
 #ifdef Q_OS_WIN
         QTRY_VERIFY_WITH_TIMEOUT(input.sample(idle, ignored, events, session), 5000);
-        auto beforeIgnored = ignored;
+        auto beforeIdle = idle;
         INPUT move = {};
         move.type = INPUT_MOUSE;
         move.mi.dwFlags = MOUSEEVENTF_MOVE;
-        QCOMPARE(SendInput(1, &move, sizeof(move)), UINT(1));
-        QTRY_VERIFY(input.sample(idle, ignored, events, session) && ignored > beforeIgnored);
+        for (int i = 0; i < 4; ++i) {
+            QCOMPARE(SendInput(1, &move, sizeof(move)), UINT(1));
+            QTest::qWait(50);
+        }
+        QVERIFY(input.sample(idle, ignored, events, session));
+        // Windows may elide a zero-motion hook notification entirely. The
+        // behavior we need is a growing idle age, not a particular event count.
+        QVERIFY2(idle >= beforeIdle + 150, "synthetic keep-awake reset the activity timer");
 
         // Remote/injected keyboard input remains real activity. F15 has no
         // default desktop action and the key is released in the same batch.
