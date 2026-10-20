@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QScopeGuard>
 #include "../../app/api/sessioninput.h"
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -41,13 +42,22 @@ private slots:
 
         // Synthetic motion with displacement (e.g. a remote player) counts.
         POINT position;
-        QVERIFY(GetCursorPos(&position));
-        move.mi.dx = position.x > 100 ? -1 : 1;
+        QVERIFY(GetPhysicalCursorPos(&position));
+        auto restoreCursor = qScopeGuard([position] { SetPhysicalCursorPos(position.x, position.y); });
+        // A one-unit relative move can round to zero under pointer scaling.
+        // Use a visibly different absolute target for the movement assertion.
+        move.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+        move.mi.dx = position.x > GetSystemMetrics(SM_CXSCREEN) / 2 ? 0 : 65535;
+        move.mi.dy = position.y > GetSystemMetrics(SM_CYSCREEN) / 2 ? 0 : 65535;
         beforeEvents = events;
         QCOMPARE(SendInput(1, &move, sizeof(move)), UINT(1));
+        QTest::qWait(100);
+        POINT after;
+        QVERIFY(GetPhysicalCursorPos(&after));
+        input.sample(idle, ignored, events, session);
+        qInfo("mouse before=(%ld,%ld) after=(%ld,%ld) events=%llu ignored=%llu",
+              position.x, position.y, after.x, after.y, events, ignored);
         QTRY_VERIFY(input.sample(idle, ignored, events, session) && events > beforeEvents);
-        move.mi.dx = -move.mi.dx;
-        SendInput(1, &move, sizeof(move));
 #else
         QVERIFY(!input.sample(idle, ignored, events, session));
 #endif
