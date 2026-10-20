@@ -7,6 +7,7 @@ import QtQuick.Window 2.2
 // Needed by the Linux in-process stream path only (issue #507); the
 // launcher's discovery runs against this singleton.
 import ComputerManager 1.0
+import KioskBridge 1.0
 
 Item {
     id: kioskRoot
@@ -685,8 +686,8 @@ Item {
         anchors.leftMargin: 32
         anchors.rightMargin: 32
 
-        cellWidth: 230
-        cellHeight: 160
+        cellWidth: Math.floor(width / Math.max(1, Math.floor(width / 280)))
+        cellHeight: Math.floor((cellWidth - 32) * 9 / 16) + 86
         focus: true
         clip: true
 
@@ -710,48 +711,12 @@ Item {
             }
         }
 
-        delegate: Item {
-            width: 220
-            height: 150
-
-            Rectangle {
-                id: tileBackground
-                anchors.fill: parent
-                radius: 12
-                color: "#18181b"
-                border.color: tileMouseArea.containsMouse ? "#6366f1" : "#27272a"
-                border.width: 1
-
-                Behavior on border.color {
-                    ColorAnimation { duration: 150 }
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    anchors.leftMargin: 16
-                    anchors.rightMargin: 16
-                    width: parent.width - 32
-                    text: experiences[index].label || experiences[index].name || ""
-                    color: "#ffffff"
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                    font.family: ""
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    elide: Text.ElideRight
-                    maximumLineCount: 3
-                }
-
-                MouseArea {
-                    id: tileMouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        startStream(experiences[index].name)
-                    }
-                }
-            }
+        delegate: ExperienceTile {
+            width: experienceGrid.cellWidth - 16
+            height: experienceGrid.cellHeight - 16
+            label: experiences[index].label || experiences[index].name || ""
+            artwork: KioskBridge.experienceArtwork(experiences[index].name || "")
+            onClicked: startStream(experiences[index].name)
         }
 
         // Empty state

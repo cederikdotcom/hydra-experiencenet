@@ -7,6 +7,7 @@
         <file>gui/StreamSegue.qml</file>
         <file>gui/StreamOverlay.qml</file>
         <file>gui/OperatorPinPrompt.qml</file>
+        <file>gui/ExperienceTile.qml</file>
         <file>gui/GamepadMapper.qml</file>
         <file>gui/QuitSegue.qml</file>
         <file>gui/NavigableToolButton.qml</file>

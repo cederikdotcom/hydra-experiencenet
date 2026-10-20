@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QUrl>
 
 #ifdef __APPLE__
 #include "macos_permissions.h"
@@ -24,6 +25,16 @@ class KioskBridge : public QObject
 public:
     explicit KioskBridge(QObject* parent = nullptr) : QObject(parent),
         m_PinRequired(QFileInfo::exists(pinPath())) {}
+
+    // Operator-managed per-installation artwork remains available offline.
+    Q_INVOKABLE QUrl experienceArtwork(const QString& name) const
+    {
+        if (!QRegularExpression(QStringLiteral("^[A-Za-z0-9_-]+$")).match(name).hasMatch())
+            return QUrl();
+        const QString path = QCoreApplication::applicationDirPath() +
+            QStringLiteral("/artwork/") + name + QStringLiteral(".jpg");
+        return QFileInfo(path).isFile() ? QUrl::fromLocalFile(path) : QUrl();
+    }
 
     // Provisioned by the operator, outside the application package. Cache the
     // enabled state so deleting/unreading the file cannot unlock a live kiosk.
