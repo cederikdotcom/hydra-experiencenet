@@ -182,7 +182,12 @@ void LocalServer::handleWindowShow(QTcpSocket* socket)
             // window, using the same presentation as the initial kiosk view.
             window->setFlags(window->flags() | Qt::FramelessWindowHint);
             window->showNormal();
-            if (window->screen()) window->setGeometry(window->screen()->geometry());
+            if (window->screen()) {
+                const QRect display = window->screen()->geometry();
+                window->setMinimumSize(display.size());
+                window->setMaximumSize(display.size());
+                window->setGeometry(display);
+            }
             makeWindowFollowAllSpaces(static_cast<uint64_t>(window->winId()));
             window->show();
 #else

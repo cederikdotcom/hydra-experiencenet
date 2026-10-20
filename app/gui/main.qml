@@ -22,6 +22,15 @@ ApplicationWindow {
     id: window
     width: 1280
     height: 600
+    readonly property bool macKiosk: typeof kioskMode !== "undefined" && kioskMode && Qt.platform.os === "osx"
+
+    // A borderless normal window is still resizable on macOS. Keep its native
+    // size constraints equal to the full display so a resize or placement
+    // adjustment cannot expose a clickable strip of the desktop.
+    minimumWidth: macKiosk ? Screen.width : 0
+    minimumHeight: macKiosk ? Screen.height : 0
+    maximumWidth: macKiosk ? Screen.width : 16777215
+    maximumHeight: macKiosk ? Screen.height : 16777215
 
     // Closing the main window ends the whole app. Without this, a
     // compositor-initiated close (Hyprland Super+W) tears down only this
@@ -61,6 +70,16 @@ ApplicationWindow {
             KioskBridge.makeFollowAllSpaces(window)
             window.raise()
             window.requestActivate()
+            // Native window creation/placement can complete after showNormal.
+            // Reapply the origin once that work has reached the event loop.
+            Qt.callLater(function() {
+                if (window.visible) {
+                    window.x = Screen.virtualX
+                    window.y = Screen.virtualY
+                    window.width = Screen.width
+                    window.height = Screen.height
+                }
+            })
         } else {
             window.showFullScreen()
         }
