@@ -30,7 +30,8 @@ protected:
         PeekMessageW(&msg, nullptr, 0, 0, PM_NOREMOVE);
         threadId.store(GetCurrentThreadId());
         current = this;
-        havePoint = GetCursorPos(&point);
+        // Low-level mouse packets use physical/per-monitor coordinates.
+        havePoint = GetPhysicalCursorPos(&point);
         lastActivity.store(GetTickCount64());
         heartbeat.store(GetTickCount64());
         HHOOK keyboard = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardInput, GetModuleHandleW(nullptr), 0);
