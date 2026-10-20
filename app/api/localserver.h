@@ -25,6 +25,7 @@ public:
 
 signals:
     void overlayShowRequested();
+    void kioskWindowShown();
 
 private slots:
     void handleConnection();

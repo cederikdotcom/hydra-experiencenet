@@ -56,6 +56,17 @@ Window {
 
     property bool quitting: false
 
+    Connections {
+        target: typeof localServerBridge !== "undefined" ? localServerBridge : null
+        function onKioskWindowShown() {
+            pinPrompt.dismiss()
+            collapseTimer.stop()
+            streamOverlayWindow.quitting = false
+            exitDropdown.visible = false
+            streamOverlayWindow.updateGeometry()
+        }
+    }
+
     function updateGeometry() {
         var expanded = quitting || pinPrompt.visible
         width = expanded ? Screen.width : collapsedWidth

@@ -162,6 +162,8 @@ void LocalServer::handleWindowHide(QTcpSocket* socket)
 
 void LocalServer::handleWindowShow(QTcpSocket* socket)
 {
+    // Agent-driven returns (including inactivity) must clear stale exit UI.
+    emit kioskWindowShown();
     QWindowList windows = QGuiApplication::topLevelWindows();
     for (QWindow* window : windows) {
         // Tool windows (our exit overlay) stay where they are —

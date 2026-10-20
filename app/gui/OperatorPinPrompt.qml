@@ -21,9 +21,14 @@ Rectangle {
         pin.forceActiveFocus()
     }
 
-    function cancel() {
+    function dismiss() {
         pin.clear()
+        errorLabel.text = ""
         visible = false
+    }
+
+    function cancel() {
+        dismiss()
         cancelled()
     }
 

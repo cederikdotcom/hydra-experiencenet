@@ -24,4 +24,5 @@ Tests:
   `operator-pin-test`. Windows portable CI runs the native verifier tests.
 - `python tests/operator-pin/test_qml.py` from a Python environment with PySide6.
   This loads the actual floating overlay, using a test Session and PIN verifier,
-  and checks wrong PIN, Cancel, and successful exit behavior.
+  and checks wrong PIN, Cancel, successful exit, and agent-driven menu return
+  clearing a pending PIN prompt without authorizing an exit.
