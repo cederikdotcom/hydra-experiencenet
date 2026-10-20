@@ -7,6 +7,10 @@
 #include <QProcess>
 #include <QGuiApplication>
 #include <QWindow>
+#include <QScreen>
+#ifdef Q_OS_MACOS
+#include "../platform/macos_permissions.h"
+#endif
 #include <SDL_log.h>
 
 LocalServer::LocalServer(QObject* parent)
@@ -166,17 +170,24 @@ void LocalServer::handleWindowShow(QTcpSocket* socket)
     emit kioskWindowShown();
     QWindowList windows = QGuiApplication::topLevelWindows();
     for (QWindow* window : windows) {
-        // Tool windows (our exit overlay) stay where they are —
-        // they're floating NSPanels and don't need fullscreen.
-        // Main windows get re-sent into fullscreen because hide()
-        // on an already-fullscreen NSWindow in macOS can drop it
-        // out of its Space, so a subsequent show() brings it back
-        // as a plain windowed app instead of the kiosk display.
-        if ((window->flags() & Qt::Tool) == Qt::Tool) {
+        // Tool windows are floating exit controls, not the kiosk grid.
+        if ((window->flags() & Qt::WindowType_Mask) == Qt::Tool) {
             window->show();
             window->raise();
         } else {
+#ifdef Q_OS_MACOS
+            // Hiding a native fullscreen window can leave its Space detached.
+            // showFullScreen() then reports success while only the overlay is
+            // visible on the desktop. Cover the display with a normal borderless
+            // window, using the same presentation as the initial kiosk view.
+            window->setFlags(window->flags() | Qt::FramelessWindowHint);
+            window->showNormal();
+            if (window->screen()) window->setGeometry(window->screen()->geometry());
+            makeWindowFollowAllSpaces(static_cast<uint64_t>(window->winId()));
+            window->show();
+#else
             window->showFullScreen();
+#endif
             window->raise();
             window->requestActivate();
         }

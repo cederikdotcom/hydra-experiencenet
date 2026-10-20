@@ -1,3 +1,4 @@
+import KioskBridge 1.0
 import QtQuick 2.9
 import QtQuick.Controls 2.2
 import QtQuick.Layouts 1.3
@@ -50,9 +51,26 @@ ApplicationWindow {
         SdlGamepadKeyNavigation.enable()
     }
 
+    function showKioskPresentation() {
+        if (Qt.platform.os === "osx") {
+            window.showNormal()
+            window.x = Screen.virtualX
+            window.y = Screen.virtualY
+            window.width = Screen.width
+            window.height = Screen.height
+            KioskBridge.makeFollowAllSpaces(window)
+            window.raise()
+            window.requestActivate()
+        } else {
+            window.showFullScreen()
+        }
+    }
+
     Component.onCompleted: {
         // Show the window according to the user's preferences
-        if (SystemProperties.hasDesktopEnvironment) {
+        if (typeof kioskMode !== "undefined" && kioskMode && Qt.platform.os === "osx") {
+            showKioskPresentation()
+        } else if (SystemProperties.hasDesktopEnvironment) {
             if (StreamingPreferences.uiDisplayMode == StreamingPreferences.UI_MAXIMIZED) {
                 window.showMaximized()
             }
