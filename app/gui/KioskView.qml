@@ -7,6 +7,7 @@ import QtQuick.Window 2.2
 // Needed by the Linux in-process stream path only (issue #507); the
 // launcher's discovery runs against this singleton.
 import ComputerManager 1.0
+import KioskBridge 1.0
 
 Item {
     id: kioskRoot
@@ -34,24 +35,23 @@ Item {
     StackView.onActivated: {
         toolBar.visible = false
 
-        // Maximize the kiosk window. We specifically AVOID
-        // window.showFullScreen() on macOS because that creates a
-        // separate macOS Space, and the floating Qt overlay window
-        // that holds our ⋯ exit handle is stuck on the original
-        // Space and would disappear. The macOS menu bar and dock
-        // are auto-hidden by enableKioskPresentation() in main.cpp
-        // (kiosk mode), and we drop the window's title bar + traffic
-        // lights by setting FramelessWindowHint so the end result is
-        // edge-to-edge kiosk chrome without losing the overlay.
+        // Keep the Mac grid on the current desktop. Native fullscreen creates
+        // a Space which can stay hidden after a local game exits. Presentation
+        // options hide Dock/menu; borderless display geometry covers all pixels.
         if (typeof window !== "undefined" && window !== null) {
-            // Go into real macOS fullscreen (a new Space) now that the
-            // floating exit overlay window has been marked with
-            // NSWindowCollectionBehaviorCanJoinAllSpaces, so it still
-            // sits above the kiosk when we enter that Space. This is
-            // the only reliable way to cover every pixel of the
-            // display (menu bar area included) without wrestling with
-            // macOS work-area math.
-            window.showFullScreen()
+            if (Qt.platform.os === "osx") {
+                window.flags |= Qt.FramelessWindowHint
+                window.showNormal()
+                window.x = Screen.virtualX
+                window.y = Screen.virtualY
+                window.width = Screen.width
+                window.height = Screen.height
+                KioskBridge.makeFollowAllSpaces(window)
+                window.raise()
+                window.requestActivate()
+            } else {
+                window.showFullScreen()
+            }
         }
 
         // Bring up the floating exit overlay so the handle and dropdown
