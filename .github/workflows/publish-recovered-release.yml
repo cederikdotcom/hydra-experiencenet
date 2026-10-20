@@ -1,0 +1,123 @@
+name: Publish recovered release
+
+# Recover publication after a standard Mac job cannot acquire a runner.
+# Uses successful CI artifacts only and verifies their tagged source first.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing release tag, for example v6.1.45'
+        required: true
+        type: string
+      mac_run:
+        description: 'Successful macOS release backfill run ID'
+        required: true
+        type: string
+      windows_run:
+        description: 'Original Release run ID with a successful Windows job'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      MAC_RUN: ${{ inputs.mac_run }}
+      WINDOWS_RUN: ${{ inputs.windows_run }}
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$MAC_RUN" =~ ^[0-9]+$ && "$WINDOWS_RUN" =~ ^[0-9]+$ ]]
+
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: HydraExperienceNet-macOS-backfill
+          run-id: ${{ inputs.mac_run }}
+          github-token: ${{ github.token }}
+          path: recovered/mac
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: HydraExperienceNet-Windows-x64
+          run-id: ${{ inputs.windows_run }}
+          github-token: ${{ github.token }}
+          path: recovered/windows
+
+      - name: Verify successful builds, source commits and Mac checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$MAC_RUN" > recovered/mac-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WINDOWS_RUN" > recovered/windows-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$WINDOWS_RUN/jobs" > recovered/windows-jobs.json
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess
+          root = pathlib.Path("recovered")
+          tag = os.environ["RELEASE_TAG"]
+          source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          mac = json.loads((root / "mac-run.json").read_text())
+          windows = json.loads((root / "windows-run.json").read_text())
+          jobs = json.loads((root / "windows-jobs.json").read_text())["jobs"]
+          provenance = json.loads((root / "mac/provenance.json").read_text())
+          assert mac["conclusion"] == "success"
+          assert mac["path"] == ".github/workflows/macos-release-backfill.yml"
+          assert windows["path"] == ".github/workflows/release.yml"
+          assert windows["head_sha"] == source
+          assert any(j["name"] == "build-windows / build" and j["conclusion"] == "success" for j in jobs)
+          assert provenance["source_commit"] == source
+          assert provenance["workflow_commit"] == mac["head_sha"]
+          assert provenance["release_tag"] == tag
+          assert provenance["run_id"] == os.environ["MAC_RUN"]
+          assert provenance["architecture"] == "arm64"
+          dmg = f"HydraExperienceNet-{tag}.dmg"
+          checks = (root / "mac/SHA256SUMS").read_text().split()
+          assert checks == [hashlib.sha256((root / "mac" / dmg).read_bytes()).hexdigest(), dmg]
+          out = pathlib.Path("release")
+          out.mkdir()
+          shutil.copy2(root / "mac" / dmg, out / dmg)
+          shutil.copy2(root / "windows/HydraExperienceNet-Windows-x64.zip",
+                       out / f"HydraExperienceNet-{tag}-windows-x64.zip")
+          shutil.copy2(root / "mac/provenance.json", out / f"HydraExperienceNet-{tag}-macos-provenance.json")
+          (out / "SHA256SUMS").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
+              for p in sorted(out.iterdir()) if p.suffix in (".dmg", ".zip")))
+          print(f"Verified {tag} source {source} and both CI artifacts")
+          PY
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          generate_release_notes: true
+          files: release/*
+
+      - name: Publish to release server
+        env:
+          HYDRARELEASE_TOKEN: ${{ secrets.HYDRARELEASE_PUBLISH_TOKEN }}
+        run: |
+          set -euo pipefail
+          SERVER="https://releases.experiencenet.com"
+          for FILE in release/*; do
+            NAME=$(basename "$FILE")
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$FILE" \
+              "$SERVER/api/v1/publish/hydraexperiencenet/production/$RELEASE_TAG/$NAME"
+          done
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $HYDRARELEASE_TOKEN" \
+            "$SERVER/api/v1/publish/hydraexperiencenet/production/$RELEASE_TAG/finalize"
