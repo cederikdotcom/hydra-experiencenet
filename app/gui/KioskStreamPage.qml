@@ -192,9 +192,7 @@ Item {
 
         // Ctrl+Alt+Shift+Q parity with the SDL path's quit combo
         onQuitRequested: {
-            if (session !== null) {
-                session.stopSession()
-            }
+            requestOperatorExit()
         }
 
         Component.onCompleted: {
@@ -248,6 +246,24 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
             }
+        }
+    }
+
+    function requestOperatorExit() {
+        videoItem.streamActive = false
+        pinPrompt.request()
+    }
+
+    OperatorPinPrompt {
+        id: pinPrompt
+        anchors.fill: parent
+        z: 20
+        onAuthorized: {
+            if (session !== null) session.stopSession()
+        }
+        onCancelled: {
+            videoItem.streamActive = true
+            videoItem.forceActiveFocus()
         }
     }
 
@@ -363,9 +379,7 @@ Item {
                 onPositionChanged: exitOverlay.touch()
                 onClicked: {
                     exitOverlay.closeDropdown()
-                    if (session !== null) {
-                        session.stopSession()
-                    }
+                    requestOperatorExit()
                 }
             }
         }

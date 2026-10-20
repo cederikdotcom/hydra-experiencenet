@@ -2,6 +2,12 @@
 
 #include <QObject>
 #include <QWindow>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
+#include <QRegularExpression>
 
 #ifdef __APPLE__
 #include "macos_permissions.h"
@@ -16,7 +22,31 @@ class KioskBridge : public QObject
     Q_OBJECT
 
 public:
-    explicit KioskBridge(QObject* parent = nullptr) : QObject(parent) {}
+    explicit KioskBridge(QObject* parent = nullptr) : QObject(parent),
+        m_PinRequired(QFileInfo::exists(pinPath())) {}
+
+    // Provisioned by the operator, outside the application package. Cache the
+    // enabled state so deleting/unreading the file cannot unlock a live kiosk.
+    Q_INVOKABLE bool operatorPinRequired() const { return m_PinRequired; }
+    Q_INVOKABLE bool verifyOperatorPin(const QString& pin)
+    {
+        if (!m_PinRequired) return false;
+        if (m_LastAttempt.isValid() && m_LastAttempt.elapsed() < 2000) return false;
+        m_LastAttempt.start();
+        QFile file(pinPath());
+        if (!file.open(QIODevice::ReadOnly)) return false;
+        const QByteArray expected = file.read(256).trimmed().toLower();
+        if (expected.size() != 64 ||
+            !QRegularExpression(QStringLiteral("^[0-9a-f]{64}$"))
+                 .match(QString::fromLatin1(expected)).hasMatch() ||
+            !QRegularExpression(QStringLiteral("^[0-9]{4,12}$")).match(pin).hasMatch())
+            return false;
+        const QByteArray actual = QCryptographicHash::hash(pin.toUtf8(),
+                                                          QCryptographicHash::Sha256).toHex();
+        unsigned char difference = 0;
+        for (int i = 0; i < actual.size(); ++i) difference |= actual[i] ^ expected[i];
+        return difference == 0;
+    }
 
     // Called from StreamOverlay.qml's Component.onCompleted, passing
     // the overlay Window itself. Grabs the native winId (an NSView* on
@@ -35,4 +65,10 @@ public:
         Q_UNUSED(window);
 #endif
     }
+private:
+    static QString pinPath() {
+        return QCoreApplication::applicationDirPath() + QStringLiteral("/operator-pin.sha256");
+    }
+    const bool m_PinRequired;
+    QElapsedTimer m_LastAttempt;
 };
