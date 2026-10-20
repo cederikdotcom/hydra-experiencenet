@@ -47,8 +47,10 @@ jobs:
           if errorlevel 1 exit /b 1
           ..\..\scripts\jom.exe release
           if errorlevel 1 exit /b 1
-          release\session-input-test.exe
-          if errorlevel 1 exit /b 1
+          release\session-input-test.exe -o session-input-results.txt,txt
+          set INPUT_TEST_EXIT=%ERRORLEVEL%
+          type session-input-results.txt
+          if not "%INPUT_TEST_EXIT%"=="0" exit /b %INPUT_TEST_EXIT%
       - name: Build and deploy Windows kiosk
         shell: cmd
         run: scripts\build-windows-portable.cmd
