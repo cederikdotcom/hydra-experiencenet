@@ -7,7 +7,6 @@ import QtQuick.Window 2.2
 // Needed by the Linux in-process stream path only (issue #507); the
 // launcher's discovery runs against this singleton.
 import ComputerManager 1.0
-import KioskBridge 1.0
 
 Item {
     id: kioskRoot
@@ -39,19 +38,7 @@ Item {
         // a Space which can stay hidden after a local game exits. Presentation
         // options hide Dock/menu; borderless display geometry covers all pixels.
         if (typeof window !== "undefined" && window !== null) {
-            if (Qt.platform.os === "osx") {
-                window.flags |= Qt.FramelessWindowHint
-                window.showNormal()
-                window.x = Screen.virtualX
-                window.y = Screen.virtualY
-                window.width = Screen.width
-                window.height = Screen.height
-                KioskBridge.makeFollowAllSpaces(window)
-                window.raise()
-                window.requestActivate()
-            } else {
-                window.showFullScreen()
-            }
+            window.showKioskPresentation()
         }
 
         // Bring up the floating exit overlay so the handle and dropdown
