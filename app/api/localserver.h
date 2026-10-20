@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QTcpServer>
+#include "sessioninput.h"
 
 // Lightweight HTTP server on 127.0.0.1:9741 exposing view-layer
 // endpoints for the hydraheadflatscreen Go service to proxy.
@@ -39,4 +40,5 @@ private:
     void sendError(QTcpSocket* socket, int statusCode, const QString& message);
 
     QTcpServer* m_server;
+    SessionInput m_input;
 };

@@ -176,6 +176,7 @@ SOURCES += \
     cli/startstream.cpp \
     cli/kiosklauncher.cpp \
     api/localserver.cpp \
+    api/sessioninput.cpp \
     settings/compatfetcher.cpp \
     settings/mappingfetcher.cpp \
     settings/streamingpreferences.cpp \
@@ -223,6 +224,7 @@ HEADERS += \
     cli/startstream.h \
     cli/kiosklauncher.h \
     api/localserver.h \
+    api/sessioninput.h \
     platform/kioskbridge.h \
     settings/streamingpreferences.h \
     streaming/input/input.h \
